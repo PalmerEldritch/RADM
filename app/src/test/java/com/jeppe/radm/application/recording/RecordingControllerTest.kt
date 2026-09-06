@@ -1,15 +1,13 @@
 package com.jeppe.radm.application.recording
 
 import com.jeppe.radm.domain.model.AbsoluteTimestampUtcMillis
-import com.jeppe.radm.domain.model.AccuracyMetres
 import com.jeppe.radm.domain.model.ActivityId
 import com.jeppe.radm.domain.model.ActivityType
-import com.jeppe.radm.domain.model.LatitudeDegrees
-import com.jeppe.radm.domain.model.LongitudeDegrees
 import com.jeppe.radm.domain.model.MonotonicTimeMillis
 import com.jeppe.radm.domain.model.RecordingEventType
 import com.jeppe.radm.domain.model.StepCounterEpoch
-import com.jeppe.radm.domain.recording.LocationMeasurement
+import com.jeppe.radm.domain.location.LocationAvailability
+import com.jeppe.radm.domain.recording.LocationCandidate
 import com.jeppe.radm.domain.recording.RecordingState
 import com.jeppe.radm.domain.recording.StepMeasurement
 import com.jeppe.radm.platform.fakes.FakeClockSource
@@ -79,6 +77,7 @@ class RecordingControllerTest {
         assertEquals(listOf(0L, 1L), fixture.repository.positions.map { it.routeSegmentIndex.value })
         assertEquals(2, fixture.repository.positions.size)
         assertEquals(2, fixture.repository.steps.size)
+        assertEquals(0.0, requireNotNull(finalizing.liveDistance).value, 0.0)
         assertEquals(
             listOf(
                 RecordingEventType.START,
@@ -151,6 +150,124 @@ class RecordingControllerTest {
         assertTrue(fixture.repository.steps.isEmpty())
     }
 
+    @Test
+    fun `VVM REC 003 and 004 start without fix then acquire the first route sample`() = runBlocking {
+        val fixture = Fixture()
+
+        val started = fixture.controller.start(ActivityType.RUNNING)
+        assertEquals(LocationAvailability.ACQUIRING, started.locationAvailability)
+        assertNull(started.liveDistance)
+
+        fixture.clock.advance(15_000L)
+        val unavailable = fixture.controller.snapshot()
+        assertEquals(RecordingState.RECORDING, unavailable.state)
+        assertEquals(15_000L, unavailable.activeElapsedTime.value)
+        assertEquals(LocationAvailability.UNAVAILABLE, unavailable.locationAvailability)
+        assertNull(unavailable.liveDistance)
+
+        fixture.emitLocation(59.3293, 18.0686)
+        val acquired = fixture.controller.snapshot()
+        assertEquals(LocationAvailability.AVAILABLE, acquired.locationAvailability)
+        assertEquals(0.0, requireNotNull(acquired.liveDistance).value, 0.0)
+
+        fixture.controller.finish()
+        assertEquals(1, fixture.repository.positions.size)
+        assertEquals(0L, fixture.repository.positions.single().sampleIndex.value)
+    }
+
+    @Test
+    fun `VVM LOC 001 through 005 rejected candidates consume no index or distance`() = runBlocking {
+        val fixture = Fixture()
+        fixture.controller.start(ActivityType.CYCLING)
+        val first = fixture.locationMeasurement(0.0, 0.0)
+        assertTrue(fixture.location.emit(first))
+        assertTrue(fixture.location.emit(first))
+
+        fixture.clock.advance(1_000L)
+        assertTrue(fixture.location.emit(fixture.locationMeasurement(91.0, 0.0)))
+        assertTrue(
+            fixture.location.emit(
+                fixture.locationMeasurement(0.0, 0.0001).copy(horizontalAccuracyMetres = 31.0),
+            ),
+        )
+        assertTrue(fixture.location.emit(fixture.locationMeasurement(1.0, 0.0)))
+        assertTrue(fixture.location.emit(fixture.locationMeasurement(0.0, 0.0001)))
+
+        fixture.controller.finish()
+
+        assertEquals(listOf(0L, 1L), fixture.repository.positions.map { it.sampleIndex.value })
+        assertEquals(2, fixture.repository.positions.size)
+        assertTrue(requireNotNull(fixture.controller.snapshot().liveDistance).value > 0.0)
+    }
+
+    @Test
+    fun `VVM LOC 006 through 008 gap persists a new segment without adding distance`() = runBlocking {
+        val fixture = Fixture()
+        fixture.controller.start(ActivityType.CYCLING)
+        fixture.emitLocation(0.0, 0.0)
+        fixture.clock.advance(1_000L)
+        fixture.emitLocation(0.0, 0.0001)
+        val beforeGap = requireNotNull(fixture.controller.snapshot().liveDistance)
+
+        fixture.clock.advance(15_000L)
+        assertEquals(RecordingState.RECORDING, fixture.controller.snapshot().state)
+        fixture.emitLocation(1.0, 1.0)
+        val afterGap = requireNotNull(fixture.controller.snapshot().liveDistance)
+
+        assertEquals(beforeGap.value, afterGap.value, 0.0)
+        fixture.controller.finish()
+        val saved = fixture.controller.save()
+        assertNotNull(saved.savedAt)
+        assertEquals(listOf(0L, 0L, 1L), fixture.repository.positions.map { it.routeSegmentIndex.value })
+    }
+
+    @Test
+    fun `VVM LOC 009 no-route activity remains saveable without synthetic positions`() = runBlocking {
+        val fixture = Fixture()
+        fixture.controller.start(ActivityType.CYCLING)
+        fixture.clock.advance(20_000L)
+
+        fixture.controller.finish()
+        val saved = fixture.controller.save()
+
+        assertEquals(20_000L, saved.activeDuration.value)
+        assertTrue(fixture.repository.positions.isEmpty())
+    }
+
+    @Test
+    fun `VVM REL 004 location failure leaves recording time and independent steps operational`() = runBlocking {
+        val fixture = Fixture()
+        fixture.controller.start(ActivityType.RUNNING)
+        fixture.emitLocation(59.3293, 18.0686)
+
+        fixture.location.becomeUnavailable()
+        fixture.clock.advance(5_000L)
+        fixture.emitSteps(100L)
+        val snapshot = fixture.controller.snapshot()
+
+        assertEquals(RecordingState.RECORDING, snapshot.state)
+        assertEquals(5_000L, snapshot.activeElapsedTime.value)
+        assertEquals(LocationAvailability.UNAVAILABLE, snapshot.locationAvailability)
+        assertEquals(0.0, requireNotNull(snapshot.liveDistance).value, 0.0)
+        fixture.controller.finish()
+        assertEquals(1, fixture.repository.positions.size)
+        assertEquals(1, fixture.repository.steps.size)
+    }
+
+    @Test
+    fun `location source startup failure degrades only location acquisition`() = runBlocking {
+        val fixture = Fixture()
+        fixture.location.startFailure = IllegalStateException("Injected location failure")
+
+        val started = fixture.controller.start(ActivityType.RUNNING)
+        fixture.clock.advance(1_000L)
+
+        assertEquals(RecordingState.RECORDING, started.state)
+        assertEquals(LocationAvailability.UNAVAILABLE, started.locationAvailability)
+        assertEquals(1_000L, fixture.controller.snapshot().activeElapsedTime.value)
+        assertTrue(fixture.steps.isStarted)
+    }
+
     private class Fixture {
         val activityId = ActivityId.parse("40000000-0000-4000-8000-000000000003")
         val repository = FakeRecordingRepository()
@@ -176,12 +293,12 @@ class RecordingControllerTest {
             assertTrue(steps.emit(stepMeasurement(cumulativeSteps)))
         }
 
-        fun locationMeasurement(latitude: Double, longitude: Double) = LocationMeasurement(
-            timestamp = clock.absoluteNow(),
-            monotonicTimestamp = clock.monotonicNow(),
-            latitude = LatitudeDegrees(latitude),
-            longitude = LongitudeDegrees(longitude),
-            horizontalAccuracy = AccuracyMetres(4.0),
+        fun locationMeasurement(latitude: Double, longitude: Double) = LocationCandidate(
+            timestampUtcMillis = clock.absoluteNow().value,
+            monotonicTimestampMillis = clock.monotonicNow().value,
+            latitudeDegrees = latitude,
+            longitudeDegrees = longitude,
+            horizontalAccuracyMetres = 4.0,
         )
 
         fun stepMeasurement(cumulativeSteps: Long) = StepMeasurement(

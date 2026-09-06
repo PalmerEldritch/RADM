@@ -10,15 +10,12 @@ import com.jeppe.radm.data.db.RadmDatabaseFactory
 import com.jeppe.radm.data.repository.RoomActivityRepository
 import com.jeppe.radm.data.repository.RoomRecordingRepository
 import com.jeppe.radm.domain.model.AbsoluteTimestampUtcMillis
-import com.jeppe.radm.domain.model.AccuracyMetres
 import com.jeppe.radm.domain.model.ActivityId
 import com.jeppe.radm.domain.model.ActivityType
-import com.jeppe.radm.domain.model.LatitudeDegrees
-import com.jeppe.radm.domain.model.LongitudeDegrees
 import com.jeppe.radm.domain.model.MonotonicTimeMillis
 import com.jeppe.radm.domain.model.RecordingEventType
 import com.jeppe.radm.domain.model.StepCounterEpoch
-import com.jeppe.radm.domain.recording.LocationMeasurement
+import com.jeppe.radm.domain.recording.LocationCandidate
 import com.jeppe.radm.domain.recording.RecordingState
 import com.jeppe.radm.domain.recording.StepMeasurement
 import com.jeppe.radm.platform.fakes.FakeClockSource
@@ -160,6 +157,28 @@ class RecordingControllerRoomTest {
         assertEquals(RecordingState.FINALIZING, fixture.controller.snapshot().state)
     }
 
+    @Test
+    fun vvmLoc006_gapSegmentAndAcceptedSourceSamplesPersistToRoom() = runBlocking {
+        val fixture = Fixture(database)
+        val activities = RoomActivityRepository(database)
+        fixture.controller.start(ActivityType.CYCLING)
+        fixture.location.emit(fixture.locationMeasurement(0.0, 0.0))
+        fixture.clock.advance(1_000L)
+        fixture.location.emit(fixture.locationMeasurement(0.0, 0.0001))
+        val distanceBeforeGap = requireNotNull(fixture.controller.snapshot().liveDistance)
+
+        fixture.clock.advance(20_000L)
+        fixture.location.emit(fixture.locationMeasurement(1.0, 1.0))
+        val distanceAfterGap = requireNotNull(fixture.controller.snapshot().liveDistance)
+        fixture.controller.finish()
+
+        val positions = activities.getPositions(ACTIVITY_ID)
+        assertEquals(listOf(0L, 1L, 2L), positions.map { it.sampleIndex.value })
+        assertEquals(listOf(0L, 0L, 1L), positions.map { it.routeSegmentIndex.value })
+        assertEquals(distanceBeforeGap.value, distanceAfterGap.value, 0.0)
+        assertEquals(21_000L, RoomRecordingRepository(database).loadActiveSession()?.activeElapsedTime?.value)
+    }
+
     private class Fixture(database: RadmDatabase) {
         val clock = FakeClockSource(
             absoluteTime = AbsoluteTimestampUtcMillis(BASE_UTC),
@@ -175,12 +194,12 @@ class RecordingControllerRoomTest {
             activityIdSource = ActivityIdSource { ACTIVITY_ID },
         )
 
-        fun locationMeasurement(latitude: Double, longitude: Double) = LocationMeasurement(
-            timestamp = clock.absoluteNow(),
-            monotonicTimestamp = clock.monotonicNow(),
-            latitude = LatitudeDegrees(latitude),
-            longitude = LongitudeDegrees(longitude),
-            horizontalAccuracy = AccuracyMetres(4.0),
+        fun locationMeasurement(latitude: Double, longitude: Double) = LocationCandidate(
+            timestampUtcMillis = clock.absoluteNow().value,
+            monotonicTimestampMillis = clock.monotonicNow().value,
+            latitudeDegrees = latitude,
+            longitudeDegrees = longitude,
+            horizontalAccuracyMetres = 4.0,
         )
 
         fun stepMeasurement(cumulativeSteps: Long) = StepMeasurement(

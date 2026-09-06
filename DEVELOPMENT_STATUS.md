@@ -2,7 +2,7 @@
 
 ## Current State
 
-Current milestone: **M5 — Location Acquisition and Live Distance (not started)**
+Current milestone: **M5 — Location Acquisition and Live Distance (implementation complete; device verification blocked)**
 
 Last completed milestone: **M4 — Android Foreground-Service Recording Shell**
 
@@ -17,7 +17,7 @@ Last completed milestone: **M4 — Android Foreground-Service Recording Shell**
 | M2 — Room persistence and repositories | PASS | 2026-09-06 |
 | M3 — Recording state machine with fake sources | PASS | 2026-09-06 |
 | M4 — Foreground-service recording shell | PASS | 2026-09-06 |
-| M5 — Location acquisition and live distance | NOT_STARTED | — |
+| M5 — Location acquisition and live distance | IN_PROGRESS | — |
 | M6 — Running step acquisition | NOT_STARTED | — |
 | M7 — Final processors and summaries | NOT_STARTED | — |
 | M8 — Activity finalization and library | NOT_STARTED | — |
@@ -226,16 +226,60 @@ Known deferred verification and limitation:
 
 ---
 
+## M5 Implementation Record
+
+Status: **IN_PROGRESS — implementation and automated verification complete; mandatory real-phone exit verification BLOCKED**
+
+Implemented:
+
+- a phone-native `LocationManager` GPS adapter requests approximately one-second high-accuracy updates and translates Android `Location` values into a source-neutral raw candidate contract;
+- the Android-independent acceptance processor implements named R00 defaults for 10-second freshness, 30-metre maximum horizontal accuracy, 60 m/s gross-jump rejection, and 15-second route gaps;
+- structural validation, stale-candidate rejection, missing/poor-accuracy handling, duplicate suppression, monotonic source-time ordering, and gross-jump rejection occur before persistence;
+- accepted coordinates, UTC timestamps, optional elevation/accuracy, active elapsed time, sample order, and route segments remain preserved source measurements; rejected candidates consume no sample index;
+- first-fix acquisition, provider availability changes, accepted-location timeout, and temporary loss expose `ACQUIRING`, `AVAILABLE`, `DEGRADED`, or `UNAVAILABLE` without resetting retained distance;
+- gaps of at least 15 seconds and manual resume begin new route segments; the processor exposes the same explicit new-segment boundary needed by later M9 recovery resume;
+- provisional live distance uses deterministic haversine distance only between accepted consecutive positions in the same segment and remains separate from final derived output;
+- location provider/start/stop failure is isolated from recording time and the independent step stream;
+- the Recording screen displays active time, live distance or unavailable state, location availability, and approximate-only capability where applicable;
+- source-time sequence decisions use Android monotonic measurement timing while the original UTC source timestamp is retained, preserving deterministic order across civil-clock adjustment.
+
+Verification:
+
+- `./gradlew testDebugUnitTest` — PASS (41 tests, 0 failures)
+- `./gradlew connectedDebugAndroidTest` — PASS (19 tests, 0 failures)
+- `./gradlew check assembleDebug` — PASS
+- Android lint/static checks — PASS
+- Pixel_10 AVD, Android 17 / API 37 actual-adapter smoke — PASS: UI start, production GPS registration, injected emulator GNSS movement, `AVAILABLE` state, and live distance increase from `0.00 km` to `0.03 km`
+- deterministic Room verification — PASS for accepted-only indexing, persisted source fields, gap segment `0,0,1`, and no cross-gap distance
+
+Relevant verification IDs:
+
+- `VVM-REC-003/004` — PASS at deterministic source/controller level; real-phone no-fix-to-fix validation remains BLOCKED
+- `VVM-LOC-001..010` — PASS at deterministic JVM/Room level
+- `VVM-REL-004` — PASS with injected location start/runtime failure while active time and steps remain operational
+- `VVM-PERM-001` — BLOCKED for the complete timing-only/no-location flow by the recorded location-FGS platform/specification conflict; approximate versus unavailable capability identification is implemented
+- `VVM-PROC-001/002` — PASS for the M5 haversine and segment-boundary primitives; final derived-stream processing remains M7 scope
+
+Blocked/deferred verification:
+
+- no physical Android phone is connected, so the M5 real-phone start/no-fix/acquire/reject/gap/temporary-loss exit sequence is `BLOCKED`, not passed;
+- Samsung Galaxy S24 field validation remains a later formal DEVICE/FIELD activity and is not inferred from emulator injection;
+- recovery execution remains M9 even though M5 provides the required explicit new-segment hook;
+- final persisted distance series and summaries remain M7; live distance is intentionally provisional;
+- the complete permission-denial timing path cannot be claimed until the Open Issue below is resolved.
+
+---
+
 ## Next Work Item
 
-Begin **M5 — Location Acquisition and Live Distance** according to `RADM-IMP_R00.md`.
+Complete **M5 physical-device smoke verification** and resolve the permission-degraded timing-only architecture conflict according to `RADM-IMP_R00.md`.
 
-No M6 work shall begin until M5 exit criteria are satisfied.
+Do not begin M6 until the remaining M5 exit criteria are satisfied or an explicit approved deviation/change resolves them.
 
 ---
 
 ## Open Issues
 
-The permission-degraded timing-only start contract needs specification/architecture resolution before it can be claimed. `RADM-REC_R00.md` sections 36 and 38 allow recording time to start with coarse-only results or disabled location services, and `SRS-PLAT-005` preserves non-geographical recording where technically meaningful. At the same time, `RADM-REC_R00.md` sections 4–5, `RADM-SAS_R00.md` section 12, and ADR-003 require the active runtime to be a location-type foreground service. Current Android requires location services and coarse or fine location permission before such a service can be promoted. M4 therefore implements the normal user-visible, permission-granted location-service path and reports a recording-critical error when those platform prerequisites are absent; it does not invent another service type. This affects the future degraded/no-location recording path, not the verified normal M4 path.
+The permission-degraded timing-only start contract needs specification/architecture resolution before it can be claimed. `RADM-REC_R00.md` sections 36 and 38 allow recording time to start with coarse-only results or disabled location services, and `SRS-PLAT-005` preserves non-geographical recording where technically meaningful. At the same time, `RADM-REC_R00.md` sections 4–5, `RADM-SAS_R00.md` section 12, and ADR-003 require the active runtime to be a location-type foreground service. Current Android requires location services and coarse or fine location permission before such a service can be promoted. M4/M5 therefore implement the normal user-visible, permission-granted location-service path and report a recording-critical error when those platform prerequisites are absent; they do not invent another service type. This blocks complete `VVM-PERM-001` and disabled-location timing-only acceptance, but not the verified normal location-capable path.
 
 The Android application-backup policy remains an approved pre-release open architecture item and is due before M14 completion.

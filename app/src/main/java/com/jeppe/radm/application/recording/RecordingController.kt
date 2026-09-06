@@ -7,6 +7,7 @@ import com.jeppe.radm.domain.model.ActiveElapsedTimeMillis
 import com.jeppe.radm.domain.model.Activity
 import com.jeppe.radm.domain.model.ActivityId
 import com.jeppe.radm.domain.model.ActivityType
+import com.jeppe.radm.domain.model.DistanceMetres
 import com.jeppe.radm.domain.model.EventIndex
 import com.jeppe.radm.domain.model.MonotonicTimeMillis
 import com.jeppe.radm.domain.model.PositionSample
@@ -16,10 +17,14 @@ import com.jeppe.radm.domain.model.RecordingEventType
 import com.jeppe.radm.domain.model.RouteSegmentIndex
 import com.jeppe.radm.domain.model.SampleIndex
 import com.jeppe.radm.domain.model.StepSample
+import com.jeppe.radm.domain.location.LiveLocationSnapshot
+import com.jeppe.radm.domain.location.LocationAcceptanceProcessor
+import com.jeppe.radm.domain.location.LocationAcceptanceResult
+import com.jeppe.radm.domain.location.LocationAvailability
 import com.jeppe.radm.domain.recording.ActiveTimeTracker
 import com.jeppe.radm.domain.recording.ClockSource
-import com.jeppe.radm.domain.recording.LocationMeasurement
 import com.jeppe.radm.domain.recording.LocationSource
+import com.jeppe.radm.domain.recording.LocationSourceEvent
 import com.jeppe.radm.domain.recording.RecordingCommand
 import com.jeppe.radm.domain.recording.RecordingSession
 import com.jeppe.radm.domain.recording.RecordingState
@@ -45,6 +50,8 @@ data class RecordingSnapshot(
     val state: RecordingState,
     val activeElapsedTime: ActiveElapsedTimeMillis,
     val routeSegmentIndex: RouteSegmentIndex?,
+    val locationAvailability: LocationAvailability,
+    val liveDistance: DistanceMetres?,
 )
 
 data class SaveRecordingMetadata(
@@ -113,6 +120,10 @@ class RecordingController(
             activityType = activityType,
             session = session,
             tracker = tracker,
+            locationProcessor = LocationAcceptanceProcessor(
+                acquisitionStartedAt = monotonicNow,
+                initialRouteSegmentIndex = session.routeSegmentIndex,
+            ),
             nextEventIndex = 1L,
             lastFlushAtMonotonic = monotonicNow,
         )
@@ -128,6 +139,7 @@ class RecordingController(
         val pausedTracker = current.tracker.pause(monotonicNow)
 
         stopApplicableSources(current.activityType)
+        current.frozenLocationSnapshot = current.locationProcessor.snapshot(monotonicNow)
         val pausedSession = current.session.copy(
             state = RecordingState.PAUSED,
             activeElapsedTime = pausedTracker.elapsedAt(monotonicNow),
@@ -173,6 +185,8 @@ class RecordingController(
 
         recordingRepository.persistTransition(resumedSession, event)
         current.commitTransition(resumedSession, current.tracker.resume(monotonicNow))
+        current.locationProcessor.beginNewSegment(resumedSession.routeSegmentIndex, monotonicNow)
+        current.frozenLocationSnapshot = null
         current.lastFlushAtMonotonic = monotonicNow
         startApplicableSources(current.activityType)
         snapshotLocked()
@@ -186,6 +200,7 @@ class RecordingController(
         val finishedTracker = current.tracker.finish(monotonicNow)
 
         stopApplicableSources(current.activityType)
+        current.frozenLocationSnapshot = current.locationProcessor.snapshot(monotonicNow)
         val finalizingSession = current.session.copy(
             state = RecordingState.FINALIZING,
             activeElapsedTime = finishedTracker.elapsedAt(monotonicNow),
@@ -249,23 +264,48 @@ class RecordingController(
 
     suspend fun snapshot(): RecordingSnapshot = commandMutex.withLock { snapshotLocked() }
 
-    private suspend fun acceptLocation(measurement: LocationMeasurement) = commandMutex.withLock {
+    private suspend fun acceptLocation(event: LocationSourceEvent) = commandMutex.withLock {
         val current = runtime ?: return@withLock
         if (current.session.state != RecordingState.RECORDING) return@withLock
-        val elapsed = current.tracker.elapsedAtOrNull(measurement.monotonicTimestamp) ?: return@withLock
+        when (event) {
+            LocationSourceEvent.ProviderAvailable -> {
+                current.locationProcessor.providerAvailable(clockSource.monotonicNow())
+                return@withLock
+            }
+
+            LocationSourceEvent.ProviderUnavailable -> {
+                current.locationProcessor.providerUnavailable()
+                return@withLock
+            }
+
+            is LocationSourceEvent.Candidate -> Unit
+        }
+        val accepted = when (
+            val result = current.locationProcessor.accept(
+                candidate = event.value,
+                evaluatedAt = clockSource.monotonicNow(),
+            )
+        ) {
+            is LocationAcceptanceResult.Accepted -> result.measurement
+            is LocationAcceptanceResult.Rejected -> return@withLock
+        }
+        val elapsed = current.tracker.elapsedAtOrNull(accepted.monotonicTimestamp) ?: return@withLock
+        if (accepted.routeSegmentIndex != current.session.routeSegmentIndex) {
+            current.session = current.session.copy(routeSegmentIndex = accepted.routeSegmentIndex)
+        }
         current.pendingPositions += PositionSample(
             activityId = current.session.activityId,
             sampleIndex = SampleIndex(current.nextPositionIndex++),
-            routeSegmentIndex = current.session.routeSegmentIndex,
-            timestamp = measurement.timestamp,
+            routeSegmentIndex = accepted.routeSegmentIndex,
+            timestamp = accepted.timestamp,
             activeElapsedTime = elapsed,
-            latitude = measurement.latitude,
-            longitude = measurement.longitude,
-            elevation = measurement.elevation,
-            horizontalAccuracy = measurement.horizontalAccuracy,
-            verticalAccuracy = measurement.verticalAccuracy,
+            latitude = accepted.latitude,
+            longitude = accepted.longitude,
+            elevation = accepted.elevation,
+            horizontalAccuracy = accepted.horizontalAccuracy,
+            verticalAccuracy = accepted.verticalAccuracy,
         )
-        flushIfRequired(current, measurement.monotonicTimestamp)
+        flushIfRequired(current, accepted.monotonicTimestamp)
     }
 
     private suspend fun acceptStep(measurement: StepMeasurement) = commandMutex.withLock {
@@ -307,12 +347,14 @@ class RecordingController(
     }
 
     private suspend fun startApplicableSources(activityType: ActivityType) {
-        locationSource.start(::acceptLocation)
+        val current = checkNotNull(runtime)
+        runCatching { locationSource.start(::acceptLocation) }
+            .onFailure { current.locationProcessor.providerUnavailable() }
         if (activityType == ActivityType.RUNNING) stepSource.start(::acceptStep)
     }
 
     private suspend fun stopApplicableSources(activityType: ActivityType) {
-        locationSource.stop()
+        runCatching { locationSource.stop() }
         if (activityType == ActivityType.RUNNING) stepSource.stop()
     }
 
@@ -340,13 +382,19 @@ class RecordingController(
             state = RecordingState.IDLE,
             activeElapsedTime = ActiveElapsedTimeMillis.ZERO,
             routeSegmentIndex = null,
+            locationAvailability = LocationAvailability.UNAVAILABLE,
+            liveDistance = null,
         )
+        val location = current.frozenLocationSnapshot
+            ?: current.locationProcessor.snapshot(clockSource.monotonicNow())
         return RecordingSnapshot(
             activityId = current.session.activityId,
             activityType = current.activityType,
             state = current.session.state,
             activeElapsedTime = current.tracker.elapsedAt(clockSource.monotonicNow()),
             routeSegmentIndex = current.session.routeSegmentIndex,
+            locationAvailability = location.availability,
+            liveDistance = location.distance,
         )
     }
 
@@ -354,6 +402,7 @@ class RecordingController(
         val activityType: ActivityType,
         var session: RecordingSession,
         var tracker: ActiveTimeTracker,
+        val locationProcessor: LocationAcceptanceProcessor,
         var nextEventIndex: Long,
         var lastFlushAtMonotonic: MonotonicTimeMillis,
         var nextPositionIndex: Long = 0L,
@@ -361,6 +410,7 @@ class RecordingController(
         val pendingPositions: MutableList<PositionSample> = mutableListOf(),
         val pendingSteps: MutableList<StepSample> = mutableListOf(),
         var finishedAt: AbsoluteTimestampUtcMillis? = null,
+        var frozenLocationSnapshot: LiveLocationSnapshot? = null,
     ) {
         fun event(
             type: RecordingEventType,

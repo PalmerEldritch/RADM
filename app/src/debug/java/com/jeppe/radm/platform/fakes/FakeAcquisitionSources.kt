@@ -3,8 +3,9 @@ package com.jeppe.radm.platform.fakes
 import com.jeppe.radm.domain.model.AbsoluteTimestampUtcMillis
 import com.jeppe.radm.domain.model.MonotonicTimeMillis
 import com.jeppe.radm.domain.recording.ClockSource
-import com.jeppe.radm.domain.recording.LocationMeasurement
+import com.jeppe.radm.domain.recording.LocationCandidate
 import com.jeppe.radm.domain.recording.LocationSource
+import com.jeppe.radm.domain.recording.LocationSourceEvent
 import com.jeppe.radm.domain.recording.StepMeasurement
 import com.jeppe.radm.domain.recording.StepSource
 
@@ -40,9 +41,12 @@ class FakeLocationSource : LocationSource {
     var stopCount: Int = 0
         private set
 
-    private var consumer: (suspend (LocationMeasurement) -> Unit)? = null
+    var startFailure: RuntimeException? = null
 
-    override suspend fun start(consumer: suspend (LocationMeasurement) -> Unit) {
+    private var consumer: (suspend (LocationSourceEvent) -> Unit)? = null
+
+    override suspend fun start(consumer: suspend (LocationSourceEvent) -> Unit) {
+        startFailure?.let { throw it }
         this.consumer = consumer
         isStarted = true
         startCount += 1
@@ -53,15 +57,23 @@ class FakeLocationSource : LocationSource {
         stopCount += 1
     }
 
-    suspend fun emit(measurement: LocationMeasurement): Boolean {
+    suspend fun emit(candidate: LocationCandidate): Boolean {
         if (!isStarted) return false
-        checkNotNull(consumer)(measurement)
+        checkNotNull(consumer)(LocationSourceEvent.Candidate(candidate))
         return true
     }
 
     /** Simulates a delayed callback already queued when acquisition was stopped. */
-    suspend fun emitDelayed(measurement: LocationMeasurement) {
-        checkNotNull(consumer)(measurement)
+    suspend fun emitDelayed(candidate: LocationCandidate) {
+        checkNotNull(consumer)(LocationSourceEvent.Candidate(candidate))
+    }
+
+    suspend fun becomeUnavailable() {
+        checkNotNull(consumer)(LocationSourceEvent.ProviderUnavailable)
+    }
+
+    suspend fun becomeAvailable() {
+        checkNotNull(consumer)(LocationSourceEvent.ProviderAvailable)
     }
 }
 

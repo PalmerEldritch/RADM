@@ -27,6 +27,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.jeppe.radm.domain.model.ActivityType
+import com.jeppe.radm.domain.model.DistanceMetres
+import com.jeppe.radm.domain.location.LocationAvailability
 import com.jeppe.radm.domain.recording.RecordingState
 import com.jeppe.radm.platform.permissions.LocationPermissionCapability
 import com.jeppe.radm.platform.recording.RecordingServiceState
@@ -39,6 +41,8 @@ object RecordingTestTags {
     const val STATE = "recording_state"
     const val ACTIVITY_ID = "recording_activity_id"
     const val ELAPSED = "recording_elapsed"
+    const val DISTANCE = "recording_distance"
+    const val LOCATION = "recording_location"
 }
 
 @Composable
@@ -95,6 +99,7 @@ fun RecordingScreen(viewModel: RecordingViewModel) {
 
                 is RecordingServiceState.Active -> ActiveRecordingContent(
                     state = state,
+                    locationCapability = capabilities.locationPermission,
                     onPause = viewModel::pause,
                     onResume = viewModel::resume,
                     onFinish = viewModel::finish,
@@ -146,6 +151,7 @@ private fun IdleRecordingContent(
 @Composable
 private fun ActiveRecordingContent(
     state: RecordingServiceState.Active,
+    locationCapability: LocationPermissionCapability,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onFinish: () -> Unit,
@@ -165,7 +171,22 @@ private fun ActiveRecordingContent(
     )
     Text("Active time")
     Spacer(Modifier.height(20.dp))
-    Text("Acquiring location", color = MaterialTheme.colorScheme.secondary)
+    Text(
+        text = snapshot.liveDistance?.let(::formatDistance) ?: "—",
+        style = MaterialTheme.typography.headlineMedium,
+        modifier = Modifier.testTag(RecordingTestTags.DISTANCE),
+    )
+    Text("Distance")
+    val locationText = snapshot.locationAvailability.displayName()
+    Text(
+        text = if (locationCapability == LocationPermissionCapability.APPROXIMATE) {
+            "$locationText (approximate only)"
+        } else {
+            locationText
+        },
+        color = MaterialTheme.colorScheme.secondary,
+        modifier = Modifier.testTag(RecordingTestTags.LOCATION),
+    )
     Text(
         text = snapshot.activityId?.value.orEmpty(),
         style = MaterialTheme.typography.labelSmall,
@@ -214,6 +235,16 @@ private fun RecordingState.displayName(): String = when (this) {
     RecordingState.PAUSED -> "Paused"
     RecordingState.FINALIZING -> "Finalizing"
 }
+
+private fun LocationAvailability.displayName(): String = when (this) {
+    LocationAvailability.ACQUIRING -> "Acquiring location"
+    LocationAvailability.AVAILABLE -> "Location available"
+    LocationAvailability.DEGRADED -> "Location degraded"
+    LocationAvailability.UNAVAILABLE -> "Location unavailable"
+}
+
+private fun formatDistance(distance: DistanceMetres): String =
+    String.format(Locale.ROOT, "%.2f km", distance.value / 1_000.0)
 
 private fun formatElapsed(milliseconds: Long): String {
     val totalSeconds = milliseconds / 1_000L

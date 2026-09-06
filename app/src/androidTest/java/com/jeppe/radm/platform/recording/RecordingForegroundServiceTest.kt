@@ -119,21 +119,31 @@ class RecordingForegroundServiceTest {
 
     private fun assertForegroundNotificationContains(expectedText: String) {
         val manager = context.getSystemService(NotificationManager::class.java)
-        val notification = waitForNotification(manager)
+        val notification = waitForNotification(manager, expectedText)
         val text = notification.extras.getCharSequence(Notification.EXTRA_TEXT)?.toString().orEmpty()
         assertTrue("Expected notification text to contain $expectedText, was $text", text.contains(expectedText))
         assertTrue(notification.flags and Notification.FLAG_ONGOING_EVENT != 0)
     }
 
-    private fun waitForNotification(manager: NotificationManager): Notification {
+    private fun waitForNotification(
+        manager: NotificationManager,
+        expectedText: String,
+    ): Notification {
         val deadline = SystemClock.elapsedRealtime() + 10_000L
         do {
             manager.activeNotifications
                 .firstOrNull { it.id == RecordingForegroundService.NOTIFICATION_ID }
-                ?.let { return it.notification }
+                ?.notification
+                ?.takeIf {
+                    it.extras.getCharSequence(Notification.EXTRA_TEXT)
+                        ?.toString()
+                        .orEmpty()
+                        .contains(expectedText)
+                }
+                ?.let { return it }
             SystemClock.sleep(50L)
         } while (SystemClock.elapsedRealtime() < deadline)
-        error("Recording foreground notification did not appear")
+        error("Recording foreground notification did not show $expectedText")
     }
 
     private fun waitForNotificationToDisappear() {

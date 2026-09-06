@@ -16,6 +16,7 @@ import com.jeppe.radm.application.recording.RecordingController
 import com.jeppe.radm.application.recording.RecordingSnapshot
 import com.jeppe.radm.domain.model.ActivityType
 import com.jeppe.radm.domain.recording.RecordingState
+import com.jeppe.radm.platform.location.AndroidLocationSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -40,7 +41,7 @@ class RecordingForegroundService : Service() {
         stateStore = container.recordingStateStore
         controller = RecordingController(
             recordingRepository = container.recordingRepository,
-            locationSource = PendingLocationSource(),
+            locationSource = AndroidLocationSource(this, serviceScope),
             stepSource = PendingStepSource(),
             clockSource = AndroidClockSource,
         )

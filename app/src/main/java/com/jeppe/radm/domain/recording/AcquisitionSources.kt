@@ -1,16 +1,12 @@
 package com.jeppe.radm.domain.recording
 
 import com.jeppe.radm.domain.model.AbsoluteTimestampUtcMillis
-import com.jeppe.radm.domain.model.AccuracyMetres
-import com.jeppe.radm.domain.model.ElevationMetres
-import com.jeppe.radm.domain.model.LatitudeDegrees
-import com.jeppe.radm.domain.model.LongitudeDegrees
 import com.jeppe.radm.domain.model.MonotonicTimeMillis
 import com.jeppe.radm.domain.model.StepCounterEpoch
 
-/** Android-independent boundary implemented by the later platform location adapter. */
+/** Android-independent boundary implemented by the platform location adapter. */
 interface LocationSource {
-    suspend fun start(consumer: suspend (LocationMeasurement) -> Unit)
+    suspend fun start(consumer: suspend (LocationSourceEvent) -> Unit)
     suspend fun stop()
 }
 
@@ -27,25 +23,28 @@ interface ClockSource {
 }
 
 /**
- * A normalized, already accepted geographical source measurement.
- *
- * Location validation and route-gap detection are introduced in M5. The M3
- * fake source supplies this boundary type directly so the recording lifecycle
- * can be proven without Android Location or prematurely implementing M5.
+ * Raw provider candidate. Primitive numerical values deliberately remain unvalidated so the
+ * Android-independent acceptance policy can reject malformed platform input deterministically.
  */
-data class LocationMeasurement(
-    val timestamp: AbsoluteTimestampUtcMillis,
-    val monotonicTimestamp: MonotonicTimeMillis,
-    val latitude: LatitudeDegrees,
-    val longitude: LongitudeDegrees,
-    val elevation: ElevationMetres? = null,
-    val horizontalAccuracy: AccuracyMetres? = null,
-    val verticalAccuracy: AccuracyMetres? = null,
+data class LocationCandidate(
+    val timestampUtcMillis: Long,
+    val monotonicTimestampMillis: Long,
+    val latitudeDegrees: Double,
+    val longitudeDegrees: Double,
+    val elevationMetres: Double? = null,
+    val horizontalAccuracyMetres: Double? = null,
+    val verticalAccuracyMetres: Double? = null,
 )
+
+sealed interface LocationSourceEvent {
+    data class Candidate(val value: LocationCandidate) : LocationSourceEvent
+    data object ProviderAvailable : LocationSourceEvent
+    data object ProviderUnavailable : LocationSourceEvent
+}
 
 /**
  * A normalized cumulative step measurement. Counter reset/epoch detection is
- * owned by the M6 step-acquisition adapter, so M3 receives the resolved epoch.
+ * owned by the M6 step-acquisition adapter, so the controller receives the resolved epoch.
  */
 data class StepMeasurement(
     val timestamp: AbsoluteTimestampUtcMillis,
