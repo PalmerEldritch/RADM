@@ -28,6 +28,15 @@ data class CadenceSample(
     val cadence: CadenceStepsPerMinute?,
 )
 
+/** Persistence-neutral aggregate matching one position-aligned derived row. */
+data class DerivedTrackMetric(
+    val activityId: ActivityId,
+    val positionSampleIndex: SampleIndex,
+    val cumulativeDistance: DistanceMetres,
+    val pace: PaceSecondsPerKilometre?,
+    val speed: SpeedMetresPerSecond?,
+)
+
 data class ActivitySummary(
     val activityId: ActivityId,
     val distance: DistanceMetres?,
@@ -68,4 +77,41 @@ data class ProcessorVersion(
     init {
         require(version >= 1) { "Processor versions begin at 1" }
     }
+}
+
+data class ProcessorDefinition(
+    val name: ProcessorName,
+    val currentVersion: Int,
+) {
+    init {
+        require(currentVersion >= 1) { "Current processor version must begin at 1" }
+    }
+}
+
+enum class ProcessorStatus {
+    CURRENT,
+    UNPROCESSED,
+    FAILED,
+}
+
+data class ActivityProcessorState(
+    val activityId: ActivityId,
+    val processorName: ProcessorName,
+    val processorVersion: Int?,
+    val status: ProcessorStatus,
+    val processedAt: AbsoluteTimestampUtcMillis?,
+) {
+    init {
+        require(processorVersion == null || processorVersion >= 1) {
+            "A stored processor version must begin at 1"
+        }
+        require(status != ProcessorStatus.CURRENT || processorVersion != null) {
+            "Current processor state requires a version"
+        }
+    }
+
+    fun isCurrentAgainst(definition: ProcessorDefinition): Boolean =
+        processorName == definition.name &&
+            status == ProcessorStatus.CURRENT &&
+            processorVersion == definition.currentVersion
 }

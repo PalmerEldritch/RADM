@@ -275,16 +275,18 @@ Verification matrix         Baseline
 Implementation plan         Baseline
 Architecture ADRs 001–009   Accepted
 
-Implementation              M1 complete; M2 not started
+Implementation              M2 complete; M3 not started
 Last local gate             ./gradlew check assembleDebug — PASS (2026-09-06)
-Applicable M1 VVM           ARCH-001/002, REC-001, TIME-001 — PASS
+Applicable M2 VVM           DB-001..009 — PASS; MIG-001/002 — NOT_APPLICABLE
+Connected Android tests     11 tests — PASS (Pixel_10 AVD, API 37, 2026-09-06)
 ```
 
-M1 established the Android-independent domain model, explicit computational
-units, deterministic recording-state and active-time semantics, and the core
-fixed fixture catalogue under [`testdata/`](testdata/). The next planned work is
-M2 — Room persistence and repositories. Emulator and physical-device checks are
-not applicable to the pure M1 domain slice and have not been claimed.
+M2 established Room schema version 1, all ten DMS core tables, explicit
+entity/domain mapping, transactional activity and recording repositories,
+DataStore-backed settings access, processor-version staleness, exported schema
+assets, and migration-test infrastructure. The next planned work is M3 — the
+recording state machine with fake sources. The API 37 emulator result does not
+substitute for minimum API 26 or formal physical-device verification.
 
 The Android application-backup policy remains intentionally open and must be resolved before R00 release.
 

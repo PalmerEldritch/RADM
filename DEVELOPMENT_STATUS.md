@@ -2,9 +2,9 @@
 
 ## Current State
 
-Current milestone: **M2 — Room Persistence and Repositories (not started)**
+Current milestone: **M3 — Recording State Machine With Fake Sources (not started)**
 
-Last completed milestone: **M1 — Domain Foundation and Deterministic Fixtures**
+Last completed milestone: **M2 — Room Persistence and Repositories**
 
 ---
 
@@ -14,7 +14,7 @@ Last completed milestone: **M1 — Domain Foundation and Deterministic Fixtures*
 |---|---|---|
 | M0 — Repository and verification bootstrap | PASS | 2026-09-05 |
 | M1 — Domain foundation and deterministic fixtures | PASS | 2026-09-06 |
-| M2 — Room persistence and repositories | NOT_STARTED | — |
+| M2 — Room persistence and repositories | PASS | 2026-09-06 |
 | M3 — Recording state machine with fake sources | NOT_STARTED | — |
 | M4 — Foreground-service recording shell | NOT_STARTED | — |
 | M5 — Location acquisition and live distance | NOT_STARTED | — |
@@ -98,16 +98,61 @@ Known deferred verification:
 
 ---
 
+## M2 Completion Record
+
+Status: **PASS**
+
+Completed:
+
+- Room 3 schema version 1 implements all ten DMS core tables, required foreign keys, cascading activity deletion, explicit source ordering, route segments, step epochs, processor definitions/state, and required indexes;
+- lowercase UUID identity and the single unresolved recording-session invariant are enforced at the database boundary;
+- `ActivityRepository`, `RecordingRepository`, and `SettingsRepository` interfaces and implementations are established;
+- activity and recording repositories use Room transactions for session creation, state/event persistence, discard, deletion, and derived-stream replacement;
+- the settings repository uses AndroidX DataStore and deliberately defines no preference keys because R00 currently specifies no user-adjustable values;
+- Room entities remain data-layer types with explicit two-way domain mappings;
+- source streams and derived streams remain separately stored and independently replaceable;
+- processor currentness requires both `CURRENT` status and a processor-version match;
+- versioned Room schema export and Android migration-test infrastructure are operational for the initial schema;
+- representative nullable measurements, route segments, counter epochs, repository round trips, rollback behavior, and application cold start are verified.
+
+Verification:
+
+- `./gradlew testDebugUnitTest` — PASS (20 tests, 0 failures)
+- `./gradlew check assembleDebug` — PASS
+- `./gradlew connectedDebugAndroidTest` — PASS (11 tests, 0 failures)
+- Pixel_10 AVD, Android 17 / API 37 cold application launch — PASS
+- Android lint/static checks — PASS
+- Room schema export — PASS (`RadmDatabase` version 1)
+
+Relevant verification IDs:
+
+- `VVM-BUILD-003` — PASS
+- `VVM-BUILD-004` — PASS for the applicable M2 automated Android suite on the stated emulator
+- `VVM-DB-001..009` — PASS
+- `VVM-MIG-001/002` — NOT_APPLICABLE because schema version 1 has no prior released RADM schema; migration infrastructure creation/open validation — PASS
+
+Specification interpretation recorded during M2:
+
+- `RADM-IMP_R00.md` says the three initial repository interfaces have Room-backed implementations, while `RADM-SAS_R00.md` sections 25 and 28 and `RADM-DMS_R00.md` section 68 assign preferences to DataStore outside the relational database. M2 follows the subsystem-specific SAS/DMS rule: activity and recording repositories are Room-backed, and the settings repository is DataStore-backed.
+
+Known deferred verification:
+
+- the API 37 emulator result is not a claim of minimum API 26 compatibility or physical-device verification;
+- migration preservation cases remain `NOT_APPLICABLE` until a second released schema exists;
+- foreground-service, lifecycle, recovery, and real acquisition behavior belongs to later milestones.
+
+---
+
 ## Next Work Item
 
-Begin **M2 — Room Persistence and Repositories** according to `RADM-IMP_R00.md`.
+Begin **M3 — Recording State Machine With Fake Sources** according to `RADM-IMP_R00.md`.
 
-No M3 work shall begin until M2 exit criteria are satisfied.
+No M4 work shall begin until M3 exit criteria are satisfied.
 
 ---
 
 ## Open Issues
 
-None currently blocking M2.
+None currently blocking M3.
 
 The Android application-backup policy remains an approved pre-release open architecture item and is due before M14 completion.

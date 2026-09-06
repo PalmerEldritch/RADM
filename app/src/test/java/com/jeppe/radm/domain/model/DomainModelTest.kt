@@ -81,6 +81,25 @@ class DomainModelTest {
     }
 
     @Test
+    fun `VVM DB 008 processor currentness requires current status and matching version`() {
+        val definition = ProcessorDefinition(ProcessorName.DISTANCE, 2)
+        val current = ActivityProcessorState(
+            activityId = DeterministicFixtures.runningActivityId,
+            processorName = ProcessorName.DISTANCE,
+            processorVersion = 2,
+            status = ProcessorStatus.CURRENT,
+            processedAt = AbsoluteTimestampUtcMillis(1_000L),
+        )
+
+        assertTrue(current.isCurrentAgainst(definition))
+        assertTrue(!current.copy(processorVersion = 1).isCurrentAgainst(definition))
+        assertTrue(!current.copy(status = ProcessorStatus.FAILED).isCurrentAgainst(definition))
+        assertThrows(IllegalArgumentException::class.java) {
+            current.copy(processorVersion = null)
+        }
+    }
+
+    @Test
     fun `large fixtures are deterministic generators with specified capacities`() {
         val positions = DeterministicFixtures.largeActivityPositions()
         assertEquals(100_000L, positions.count().toLong())
