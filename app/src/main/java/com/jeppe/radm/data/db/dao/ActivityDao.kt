@@ -43,6 +43,30 @@ interface ActivityDao {
         updatedAtUtcMs: Long,
     ): Int
 
+    @Query(
+        """
+        UPDATE activities
+        SET activity_type = :activityType,
+            title = :title,
+            notes = :notes,
+            ended_at_utc_ms = :endedAtUtcMs,
+            saved_at_utc_ms = :savedAtUtcMs,
+            active_duration_ms = :activeDurationMs,
+            updated_at_utc_ms = :updatedAtUtcMs
+        WHERE activity_id = :activityId
+        """,
+    )
+    suspend fun finalizeActivity(
+        activityId: String,
+        activityType: String,
+        title: String?,
+        notes: String?,
+        endedAtUtcMs: Long,
+        savedAtUtcMs: Long,
+        activeDurationMs: Long,
+        updatedAtUtcMs: Long,
+    ): Int
+
     @Query("DELETE FROM activities WHERE activity_id = :activityId")
     suspend fun deleteActivity(activityId: String): Int
 

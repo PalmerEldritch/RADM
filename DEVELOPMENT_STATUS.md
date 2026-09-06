@@ -2,9 +2,9 @@
 
 ## Current State
 
-Current milestone: **M3 — Recording State Machine With Fake Sources (not started)**
+Current milestone: **M4 — Android Foreground-Service Recording Shell (not started)**
 
-Last completed milestone: **M2 — Room Persistence and Repositories**
+Last completed milestone: **M3 — Recording State Machine With Fake Sources**
 
 ---
 
@@ -15,7 +15,7 @@ Last completed milestone: **M2 — Room Persistence and Repositories**
 | M0 — Repository and verification bootstrap | PASS | 2026-09-05 |
 | M1 — Domain foundation and deterministic fixtures | PASS | 2026-09-06 |
 | M2 — Room persistence and repositories | PASS | 2026-09-06 |
-| M3 — Recording state machine with fake sources | NOT_STARTED | — |
+| M3 — Recording state machine with fake sources | PASS | 2026-09-06 |
 | M4 — Foreground-service recording shell | NOT_STARTED | — |
 | M5 — Location acquisition and live distance | NOT_STARTED | — |
 | M6 — Running step acquisition | NOT_STARTED | — |
@@ -143,16 +143,59 @@ Known deferred verification:
 
 ---
 
+## M3 Completion Record
+
+Status: **PASS**
+
+Completed:
+
+- Android-independent `LocationSource`, `StepSource`, and separated civil/monotonic `ClockSource` contracts established;
+- debug-only deterministic fake location, step, and clock sources implemented without introducing Android acquisition APIs into the domain boundary;
+- serialized application recording controller implements Start, Pause, Resume, Finish, Save, and Discard against fake sources;
+- recording start atomically creates the activity, durable `RECORDING` session, zero active-time checkpoint, and `START` event before acquisition begins;
+- accepted fake source measurements are assigned explicit zero-based indexes and active elapsed time, buffered within the REC five-second/20-sample limits, and transactionally checkpointed;
+- Pause and Finish atomically flush pending source samples with their durable event/state transitions;
+- paused and delayed pre-resume source callbacks are excluded, and Resume begins a new route segment;
+- Finish freezes active elapsed time and stops acquisition; Save atomically finalizes the activity and removes the unresolved session; Discard cascades from the activity root;
+- a completed simulated Running lifecycle is saved, the on-disk Room database is closed/reopened, and the activity, source streams, event history, duration, and absence of unresolved session are verified;
+- injected failure during session removal proves that the Room save transaction does not expose a partially saved library activity.
+
+Verification:
+
+- `./gradlew testDebugUnitTest` — PASS (24 tests, 0 failures)
+- `./gradlew check assembleDebug` — PASS
+- `./gradlew connectedDebugAndroidTest` — PASS (14 tests, 0 failures)
+- Pixel_10 AVD, Android 17 / API 37 — PASS for the applicable M3 deterministic Room/controller suite
+- Android lint/static checks — PASS
+- domain dependency boundary scan — PASS
+
+Relevant verification IDs:
+
+- `VVM-REC-002` — PASS
+- `VVM-REC-005..009` — PASS
+- `VVM-TIME-001/002` — PASS
+- `VVM-DUR-002/003` — PASS
+- `VVM-REL-005` — PASS
+
+Known deferred verification:
+
+- the Android foreground service, Activity/UI lifecycle reconnection, and notification authority begin in M4;
+- real location acceptance, gaps, and live distance begin in M5; real Running step-counter epoch handling begins in M6;
+- persistence retry, forced-process tail loss, periodic recovery checkpoint scheduling, and reboot/process recovery remain assigned to M9;
+- the API 37 emulator result is not a claim of API 26 or physical-device recording verification.
+
+---
+
 ## Next Work Item
 
-Begin **M3 — Recording State Machine With Fake Sources** according to `RADM-IMP_R00.md`.
+Begin **M4 — Android Foreground-Service Recording Shell** according to `RADM-IMP_R00.md`.
 
-No M4 work shall begin until M3 exit criteria are satisfied.
+No M5 work shall begin until M4 exit criteria are satisfied.
 
 ---
 
 ## Open Issues
 
-None currently blocking M3.
+None currently blocking M4.
 
 The Android application-backup policy remains an approved pre-release open architecture item and is due before M14 completion.
