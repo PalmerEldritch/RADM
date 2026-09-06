@@ -1,3 +1,19 @@
 <resources>
     <string name="app_name">RADM</string>
+    <string name="activity_type_running">Running</string>
+    <string name="activity_type_cycling">Cycling</string>
+    <string name="activity_type_skiing">Cross-country skiing</string>
+    <string name="recording_notification_channel_name">Activity recording</string>
+    <string name="recording_notification_channel_description">Shows the current RADM recording state</string>
+    <string name="recording_notification_title">RADM activity recording</string>
+    <string name="recording_notification_starting">Starting %1$s</string>
+    <string name="recording_notification_recording">Recording %1$s</string>
+    <string name="recording_notification_paused">Paused %1$s</string>
+    <string name="recording_notification_finalizing">Finalizing %1$s</string>
+    <string name="recording_service_restart_requires_recovery">The recording service restarted without continuous runtime state. Recovery is required.</string>
+    <string name="recording_service_stopped_unexpectedly">The recording service stopped unexpectedly. Retained data requires recovery.</string>
+    <string name="recording_service_invalid_start">The recording service received an invalid start request.</string>
+    <string name="recording_service_location_capability_required">Android requires location permission and enabled location services before this location recording service can start.</string>
+    <string name="recording_service_start_blocked">Android prevented the recording service from starting.</string>
+    <string name="recording_command_failed">The recording command failed.</string>
 </resources>

@@ -59,8 +59,8 @@ class InvalidRecordingCommandException(
 ) : IllegalStateException("$command is invalid while recording state is $state")
 
 /**
- * M3 application controller. M4 will place this controller under foreground-
- * service ownership; it deliberately has no Activity, ViewModel, or Service dependency.
+ * Android-independent recording controller. The foreground service owns its runtime instance;
+ * the controller deliberately has no Activity, ViewModel, or Service dependency.
  */
 class RecordingController(
     private val recordingRepository: RecordingRepository,

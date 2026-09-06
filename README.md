@@ -275,19 +275,21 @@ Verification matrix         Baseline
 Implementation plan         Baseline
 Architecture ADRs 001–009   Accepted
 
-Implementation              M3 complete; M4 not started
+Implementation              M4 complete; M5 not started
 Last local gate             ./gradlew check assembleDebug — PASS (2026-09-06)
-Applicable M3 VVM           REC-002/005..009, TIME-001/002, DUR-002/003, REL-005 — PASS
-Connected Android tests     14 tests — PASS (Pixel_10 AVD, API 37, 2026-09-06)
+Applicable M4 VVM           FGS-001..003, COMPAT-004 — PASS at the stated M4 scope
+Connected Android tests     16 tests — PASS (Pixel_10 AVD, API 37, 2026-09-06)
 ```
 
-M3 established Android-independent acquisition/clock contracts, deterministic
-debug fakes, a serialized recording controller, monotonic active-time mapping,
-transactional source flush/state ordering, atomic save/discard, and a complete
-fake-source lifecycle that remains intact after closing and reopening Room. The
-next planned work is M4 — the Android foreground-service recording shell. The
-API 37 emulator result does not substitute for minimum API 26 or formal
-physical-device verification.
+M4 places authoritative recording execution in a dedicated location-type
+foreground service, exposes serialized command intents and observable service
+state, maintains the required ongoing notification, and reconnects the minimal
+Recording screen/ViewModel across Activity recreation. Centralized capability
+handling distinguishes precise and approximate location and applies
+API-dependent notification and activity-recognition permission rules. The next
+planned work is M5 — location acquisition and live distance. The API 37 emulator
+result does not substitute for minimum API 26 or formal physical-device
+verification.
 
 The Android application-backup policy remains intentionally open and must be resolved before R00 release.
 

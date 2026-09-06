@@ -2,9 +2,9 @@
 
 ## Current State
 
-Current milestone: **M4 — Android Foreground-Service Recording Shell (not started)**
+Current milestone: **M5 — Location Acquisition and Live Distance (not started)**
 
-Last completed milestone: **M3 — Recording State Machine With Fake Sources**
+Last completed milestone: **M4 — Android Foreground-Service Recording Shell**
 
 ---
 
@@ -16,7 +16,7 @@ Last completed milestone: **M3 — Recording State Machine With Fake Sources**
 | M1 — Domain foundation and deterministic fixtures | PASS | 2026-09-06 |
 | M2 — Room persistence and repositories | PASS | 2026-09-06 |
 | M3 — Recording state machine with fake sources | PASS | 2026-09-06 |
-| M4 — Foreground-service recording shell | NOT_STARTED | — |
+| M4 — Foreground-service recording shell | PASS | 2026-09-06 |
 | M5 — Location acquisition and live distance | NOT_STARTED | — |
 | M6 — Running step acquisition | NOT_STARTED | — |
 | M7 — Final processors and summaries | NOT_STARTED | — |
@@ -186,16 +186,56 @@ Known deferred verification:
 
 ---
 
+## M4 Completion Record
+
+Status: **PASS**
+
+Completed:
+
+- a dedicated, non-exported Android location-type foreground service owns the runtime `RecordingController`, Android monotonic/civil clock adapter, M4 source-adapter shell, persistence buffering, observable session state, and notification lifecycle;
+- user-visible Start uses `startForegroundService`, prompt foreground promotion, and a serialized service command actor for Start, Pause, Resume, and Finish without placing recording authority in the Activity or ViewModel;
+- an application-scoped container provides the Room recording repository, process-local service-state observation, command client, and centralized recording capability checker;
+- the minimal Compose Recording screen and ViewModel select the R00 activity type, request applicable permissions, issue commands, display active elapsed time/state, and reconnect to the service-owned session after Activity recreation;
+- the persistent notification identifies RADM and distinguishes starting, recording, paused, and finalizing states, and is removed when the service resolves;
+- the capability framework distinguishes absent, approximate, and precise location permission; checks location-service availability; applies API-level notification and activity-recognition rules; and requests coarse/fine location together for Android's precise-location flow;
+- the manifest declares coarse/fine location, activity recognition, notifications, base foreground-service permission, location foreground-service permission/type, and deliberately omits background-location permission;
+- M5/M6 acquisition is represented only by explicit no-op shell adapters; real location and step acquisition have not been pulled forward.
+
+Verification:
+
+- `./gradlew testDebugUnitTest` — PASS (24 tests, 0 failures)
+- `./gradlew check assembleDebug` — PASS
+- `./gradlew connectedDebugAndroidTest` — PASS (16 tests, 0 failures)
+- Pixel_10 AVD, Android 17 / API 37 — PASS for the M4 current-platform foreground-service lifecycle and manifest contract
+- Android lint/static checks — PASS
+
+Relevant verification IDs:
+
+- `VVM-FGS-001` — PASS: ongoing foreground notification exists while recording/paused and is removed after service resolution
+- `VVM-FGS-002` — PASS at M4 scope: backgrounding retains the same UUID/session and active elapsed time progresses; real acquisition continuity is deferred to M5/M6
+- `VVM-FGS-003` — PASS: Activity recreation creates no second session and the recreated ViewModel observes the existing authoritative session
+- `VVM-COMPAT-004` — PASS on the API 37 emulator for the user-visible modern start path and continued background operation
+
+Known deferred verification and limitation:
+
+- actual location/step source continuation cannot be exercised until M5/M6 replaces the explicit shell adapters;
+- screen-off, task-removal, forced-process, reboot/recovery, long-duration, GNSS, sensor, and physical-device behavior remain assigned to their later VVM milestones;
+- the result does not claim API 26 execution or Samsung Galaxy S24 physical-device verification;
+- Finish intentionally leaves the service in durable `FINALIZING`; user-facing save/discard workflow and library integration remain M8 scope;
+- the no-location/timing-only specification conflict is recorded under Open Issues below.
+
+---
+
 ## Next Work Item
 
-Begin **M4 — Android Foreground-Service Recording Shell** according to `RADM-IMP_R00.md`.
+Begin **M5 — Location Acquisition and Live Distance** according to `RADM-IMP_R00.md`.
 
-No M5 work shall begin until M4 exit criteria are satisfied.
+No M6 work shall begin until M5 exit criteria are satisfied.
 
 ---
 
 ## Open Issues
 
-None currently blocking M4.
+The permission-degraded timing-only start contract needs specification/architecture resolution before it can be claimed. `RADM-REC_R00.md` sections 36 and 38 allow recording time to start with coarse-only results or disabled location services, and `SRS-PLAT-005` preserves non-geographical recording where technically meaningful. At the same time, `RADM-REC_R00.md` sections 4–5, `RADM-SAS_R00.md` section 12, and ADR-003 require the active runtime to be a location-type foreground service. Current Android requires location services and coarse or fine location permission before such a service can be promoted. M4 therefore implements the normal user-visible, permission-granted location-service path and reports a recording-critical error when those platform prerequisites are absent; it does not invent another service type. This affects the future degraded/no-location recording path, not the verified normal M4 path.
 
 The Android application-backup policy remains an approved pre-release open architecture item and is due before M14 completion.
