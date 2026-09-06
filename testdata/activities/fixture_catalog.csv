@@ -1,0 +1,20 @@
+fixture_id,category,asset_or_generator,deterministic_expectation,fixed_activity_id
+continuous_route,source,continuous_route/position_samples.csv,1 Hz accepted positions in one route segment,10000000-0000-4000-8000-000000000001
+irregular_timestamps,source,irregular_timestamps/position_samples.csv,accepted positions retain irregular source timing,10000000-0000-4000-8000-000000000001
+initial_without_location,source,initial_without_location/position_samples.csv,first accepted position occurs at 20 active seconds,10000000-0000-4000-8000-000000000001
+poor_quality_interval,candidate,../processing/poor_quality_candidates.csv,poor accuracy candidate remains rejectable,10000000-0000-4000-8000-000000000001
+route_gap,source,route_gap/position_samples.csv,20 second gap begins route segment 1,10000000-0000-4000-8000-000000000001
+manual_pause,event,manual_pause/recording_events.csv,5 wall minutes do not advance active time,10000000-0000-4000-8000-000000000001
+recovery_boundary,event,recovery_boundary/recording_events.csv,recovery downtime does not advance active time,10000000-0000-4000-8000-000000000001
+gross_location_jump,candidate,../processing/gross_jump_candidates.csv,gross jump remains rejectable,10000000-0000-4000-8000-000000000001
+missing_elevation,source,missing_elevation/position_samples.csv,empty elevation remains missing,10000000-0000-4000-8000-000000000001
+no_route,source,no_route/README.md,position stream is absent rather than fabricated,10000000-0000-4000-8000-000000000001
+running_with_steps,source,running_with_steps/step_samples.csv,cumulative Running steps use epoch 0,10000000-0000-4000-8000-000000000001
+running_without_steps,source,running_without_steps/README.md,step stream is absent rather than fabricated,10000000-0000-4000-8000-000000000001
+step_counter_reset,source,step_counter_reset/step_samples.csv,counter decrease begins epoch 1,10000000-0000-4000-8000-000000000001
+step_counter_unavailable,source,running_without_steps/README.md,unavailable counter produces no source stream,10000000-0000-4000-8000-000000000001
+database_transient_failure,scenario,scenario_definitions.csv,first write fails and retry succeeds without source mutation,10000000-0000-4000-8000-000000000001
+process_interruption,scenario,scenario_definitions.csv,recovery resumes existing identity and checkpoint,10000000-0000-4000-8000-000000000001
+reboot_recovery,scenario,scenario_definitions.csv,reboot requires interrupted recovery handling,10000000-0000-4000-8000-000000000001
+large_activity,generator,DeterministicFixtures.largeActivityPositions,exactly 100000 deterministic position samples,10000000-0000-4000-8000-000000000001
+large_library,generator,DeterministicFixtures.largeLibrarySummaries,exactly 10000 deterministic summaries,20000000-0000-4000-8000-000000000000

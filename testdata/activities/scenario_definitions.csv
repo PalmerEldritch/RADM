@@ -1,0 +1,4 @@
+scenario_id,fixed_activity_id,checkpoint_active_elapsed_ms,recovery_wall_offset_ms,expected
+database_transient_failure,10000000-0000-4000-8000-000000000001,300000,0,first_write_fails_second_write_succeeds
+process_interruption,10000000-0000-4000-8000-000000000001,300000,900000,resume_same_identity_from_checkpoint
+reboot_recovery,10000000-0000-4000-8000-000000000001,300000,900000,remain_interrupted_until_user_resolution

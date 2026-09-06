@@ -1,0 +1,5 @@
+sample_index,route_segment_index,timestamp_utc_ms,elapsed_ms,latitude_deg,longitude_deg,elevation_m,horizontal_accuracy_m,vertical_accuracy_m
+0,0,1788379200000,0,59.32930,18.06860,22.0,4.0,
+1,0,1788379200750,750,59.32934,18.06867,22.1,4.0,
+2,0,1788379202300,2300,59.32942,18.06880,22.4,4.0,
+3,0,1788379207000,7000,59.32960,18.06910,22.9,4.0,

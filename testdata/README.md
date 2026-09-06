@@ -20,6 +20,13 @@ testdata/
 └── interchange/
 ```
 
+The M1 source-fixture catalogue is in
+[`activities/fixture_catalog.csv`](activities/fixture_catalog.csv). Small,
+reviewable CSV source streams are committed directly. The 100,000-position and
+10,000-summary capacity fixtures are generated deterministically by
+`DeterministicFixtures` in the JVM test source set so large generated artifacts
+do not need to be committed.
+
 Representative deterministic fixtures include:
 
 - continuous route;
