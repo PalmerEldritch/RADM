@@ -73,3 +73,21 @@ data class ActivitySummaryEntity(
     @ColumnInfo(name = "total_ascent_m")
     val totalAscentM: Double?,
 )
+
+data class ActivityLibraryItemEntity(
+    @ColumnInfo(name = "activity_id")
+    val activityId: String,
+    @ColumnInfo(name = "activity_type")
+    val activityType: String,
+    val title: String?,
+    @ColumnInfo(name = "started_at_utc_ms")
+    val startedAtUtcMs: Long,
+    @ColumnInfo(name = "active_duration_ms")
+    val activeDurationMs: Long,
+    @ColumnInfo(name = "distance_m")
+    val distanceM: Double?,
+    @ColumnInfo(name = "average_pace_s_per_km")
+    val averagePaceSPerKm: Double?,
+    @ColumnInfo(name = "average_speed_mps")
+    val averageSpeedMps: Double?,
+)

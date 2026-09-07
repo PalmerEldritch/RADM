@@ -3,6 +3,7 @@ package com.jeppe.radm.data.repository
 import com.jeppe.radm.domain.model.AbsoluteTimestampUtcMillis
 import com.jeppe.radm.domain.model.Activity
 import com.jeppe.radm.domain.model.ActivityId
+import com.jeppe.radm.domain.model.ActivityLibraryItem
 import com.jeppe.radm.domain.model.ActivityProcessorState
 import com.jeppe.radm.domain.model.ActivitySummary
 import com.jeppe.radm.domain.model.ActivityType
@@ -25,6 +26,7 @@ interface ActivityRepository {
     suspend fun insert(activity: Activity)
     suspend fun get(activityId: ActivityId): Activity?
     suspend fun listSaved(): List<Activity>
+    suspend fun listLibraryItems(): List<ActivityLibraryItem>
     suspend fun updateMetadata(activityId: ActivityId, update: ActivityMetadataUpdate): Boolean
     suspend fun delete(activityId: ActivityId): Boolean
 

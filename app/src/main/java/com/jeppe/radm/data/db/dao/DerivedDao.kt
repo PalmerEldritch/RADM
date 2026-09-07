@@ -75,6 +75,17 @@ interface DerivedDao {
 
     @Query(
         """
+        UPDATE activity_processor_state
+        SET processor_version = NULL,
+            status = 'UNPROCESSED',
+            processed_at_utc_ms = NULL
+        WHERE activity_id = :activityId
+        """,
+    )
+    suspend fun invalidateProcessorStates(activityId: String)
+
+    @Query(
+        """
         SELECT activity_processor_state.*,
                processor_definitions.current_version AS current_processor_version
         FROM activity_processor_state

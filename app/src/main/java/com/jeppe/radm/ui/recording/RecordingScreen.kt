@@ -9,17 +9,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,6 +33,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.jeppe.radm.domain.model.ActivityType
+import com.jeppe.radm.application.recording.SaveRecordingMetadata
 import com.jeppe.radm.domain.model.DistanceMetres
 import com.jeppe.radm.domain.location.LocationAvailability
 import com.jeppe.radm.domain.recording.RecordingState
@@ -43,10 +50,20 @@ object RecordingTestTags {
     const val ELAPSED = "recording_elapsed"
     const val DISTANCE = "recording_distance"
     const val LOCATION = "recording_location"
+    const val BACK = "recording_back"
+    const val FINALIZATION = "recording_finalization"
+    const val SAVE = "recording_save"
+    const val DISCARD = "recording_discard"
+    const val DISCARD_CONFIRM = "recording_discard_confirm"
+    const val TITLE = "recording_title"
+    const val NOTES = "recording_notes"
 }
 
 @Composable
-fun RecordingScreen(viewModel: RecordingViewModel) {
+fun RecordingScreen(
+    viewModel: RecordingViewModel,
+    onBackToLibrary: () -> Unit = {},
+) {
     val recordingState by viewModel.recordingState.collectAsState()
     val capabilities by viewModel.capabilities.collectAsState()
     val message by viewModel.message.collectAsState()
@@ -78,6 +95,7 @@ fun RecordingScreen(viewModel: RecordingViewModel) {
                     locationCapability = capabilities.locationPermission,
                     locationServicesEnabled = capabilities.locationServicesEnabled,
                     error = (state as? RecordingServiceState.CriticalError)?.message ?: message,
+                    onBackToLibrary = onBackToLibrary,
                     onStart = {
                         val permissions = viewModel.permissionsForStart(selectedType)
                         if (permissions.isEmpty()) {
@@ -97,13 +115,24 @@ fun RecordingScreen(viewModel: RecordingViewModel) {
                     )
                 }
 
-                is RecordingServiceState.Active -> ActiveRecordingContent(
-                    state = state,
-                    locationCapability = capabilities.locationPermission,
-                    onPause = viewModel::pause,
-                    onResume = viewModel::resume,
-                    onFinish = viewModel::finish,
-                )
+                is RecordingServiceState.Active -> if (
+                    state.snapshot.state == RecordingState.FINALIZING
+                ) {
+                    FinalizationContent(
+                        state = state,
+                        error = message,
+                        onSave = viewModel::save,
+                        onDiscard = viewModel::discard,
+                    )
+                } else {
+                    ActiveRecordingContent(
+                        state = state,
+                        locationCapability = capabilities.locationPermission,
+                        onPause = viewModel::pause,
+                        onResume = viewModel::resume,
+                        onFinish = viewModel::finish,
+                    )
+                }
             }
         }
     }
@@ -116,9 +145,14 @@ private fun IdleRecordingContent(
     locationCapability: LocationPermissionCapability,
     locationServicesEnabled: Boolean,
     error: String?,
+    onBackToLibrary: () -> Unit,
     onStart: () -> Unit,
 ) {
     Text("New activity", style = MaterialTheme.typography.headlineMedium)
+    TextButton(
+        onClick = onBackToLibrary,
+        modifier = Modifier.testTag(RecordingTestTags.BACK),
+    ) { Text("Back to activities") }
     Spacer(Modifier.height(20.dp))
     ActivityType.entries.forEach { type ->
         FilterChip(
@@ -145,6 +179,102 @@ private fun IdleRecordingContent(
         modifier = Modifier.testTag(RecordingTestTags.START),
     ) {
         Text("Start recording")
+    }
+}
+
+@Composable
+private fun FinalizationContent(
+    state: RecordingServiceState.Active,
+    error: String?,
+    onSave: (SaveRecordingMetadata) -> Unit,
+    onDiscard: () -> Unit,
+) {
+    val snapshot = state.snapshot
+    var selectedType by rememberSaveable(snapshot.activityId?.value) {
+        mutableStateOf(checkNotNull(snapshot.activityType))
+    }
+    var title by rememberSaveable(snapshot.activityId?.value) { mutableStateOf("") }
+    var notes by rememberSaveable(snapshot.activityId?.value) { mutableStateOf("") }
+    var confirmDiscard by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .testTag(RecordingTestTags.FINALIZATION),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("Activity complete", style = MaterialTheme.typography.headlineMedium)
+        Text(selectedType.displayName(), style = MaterialTheme.typography.titleLarge)
+        Spacer(Modifier.height(16.dp))
+        Text(formatElapsed(snapshot.activeElapsedTime.value), style = MaterialTheme.typography.headlineMedium)
+        Text(snapshot.liveDistance?.let(::formatDistance) ?: "Distance unavailable")
+        Spacer(Modifier.height(16.dp))
+        ActivityType.entries.forEach { type ->
+            FilterChip(
+                selected = selectedType == type,
+                onClick = { selectedType = type },
+                label = { Text(type.displayName()) },
+                modifier = Modifier.testTag("recording_final_type_${type.name}"),
+            )
+        }
+        OutlinedTextField(
+            value = title,
+            onValueChange = { title = it },
+            label = { Text("Title (optional)") },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(RecordingTestTags.TITLE),
+        )
+        OutlinedTextField(
+            value = notes,
+            onValueChange = { notes = it },
+            label = { Text("Notes (optional)") },
+            minLines = 2,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(RecordingTestTags.NOTES),
+        )
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        Spacer(Modifier.height(16.dp))
+        Button(
+            onClick = {
+                onSave(
+                    SaveRecordingMetadata(
+                        activityType = selectedType,
+                        title = title.trim().takeIf(String::isNotEmpty),
+                        notes = notes.trim().takeIf(String::isNotEmpty),
+                    ),
+                )
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(RecordingTestTags.SAVE),
+        ) { Text("Save activity") }
+        TextButton(
+            onClick = { confirmDiscard = true },
+            modifier = Modifier.testTag(RecordingTestTags.DISCARD),
+        ) { Text("Discard") }
+    }
+
+    if (confirmDiscard) {
+        AlertDialog(
+            onDismissRequest = { confirmDiscard = false },
+            title = { Text("Discard this recording?") },
+            text = { Text("This permanently removes the activity and all recorded data.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        confirmDiscard = false
+                        onDiscard()
+                    },
+                    modifier = Modifier.testTag(RecordingTestTags.DISCARD_CONFIRM),
+                ) { Text("Discard permanently") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDiscard = false }) { Text("Keep activity") }
+            },
+        )
     }
 }
 

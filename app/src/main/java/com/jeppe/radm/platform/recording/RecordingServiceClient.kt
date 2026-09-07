@@ -3,6 +3,7 @@ package com.jeppe.radm.platform.recording
 import android.content.Context
 import android.content.Intent
 import com.jeppe.radm.R
+import com.jeppe.radm.application.recording.SaveRecordingMetadata
 import com.jeppe.radm.domain.model.ActivityType
 import com.jeppe.radm.platform.permissions.RecordingCapabilityChecker
 
@@ -47,7 +48,17 @@ class RecordingServiceClient(
 
     fun finish(): Result<Unit> = send(RecordingServiceAction.FINISH)
 
-    fun save(): Result<Unit> = send(RecordingServiceAction.SAVE)
+    fun save(metadata: SaveRecordingMetadata = SaveRecordingMetadata()): Result<Unit> = runCatching {
+        check(stateStore.state.value is RecordingServiceState.Active) {
+            "No authoritative recording service session is available"
+        }
+        val intent = RecordingForegroundService.intent(applicationContext, RecordingServiceAction.SAVE)
+        metadata.activityType?.let { intent.putExtra(RecordingForegroundService.EXTRA_FINAL_ACTIVITY_TYPE, it.name) }
+        metadata.title?.let { intent.putExtra(RecordingForegroundService.EXTRA_TITLE, it) }
+        metadata.notes?.let { intent.putExtra(RecordingForegroundService.EXTRA_NOTES, it) }
+        applicationContext.startService(intent)
+        Unit
+    }
 
     fun discard(): Result<Unit> = send(RecordingServiceAction.DISCARD)
 

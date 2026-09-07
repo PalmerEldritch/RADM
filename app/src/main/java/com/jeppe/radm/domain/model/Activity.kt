@@ -48,3 +48,15 @@ data class Activity(
     val createdAt: AbsoluteTimestampUtcMillis,
     val updatedAt: AbsoluteTimestampUtcMillis,
 )
+
+/** Summary-oriented projection used by the Activity Library without loading sample streams. */
+data class ActivityLibraryItem(
+    val activityId: ActivityId,
+    val activityType: ActivityType,
+    val title: String?,
+    val startedAt: AbsoluteTimestampUtcMillis,
+    val activeDuration: ActiveElapsedTimeMillis,
+    val distance: DistanceMetres?,
+    val averagePace: PaceSecondsPerKilometre?,
+    val averageSpeed: SpeedMetresPerSecond?,
+)

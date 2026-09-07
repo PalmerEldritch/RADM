@@ -3,6 +3,7 @@ package com.jeppe.radm.ui.recording
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.jeppe.radm.RadmContainer
+import com.jeppe.radm.application.recording.SaveRecordingMetadata
 import com.jeppe.radm.domain.model.ActivityType
 import com.jeppe.radm.platform.permissions.RecordingCapabilities
 import com.jeppe.radm.platform.recording.RecordingServiceClient
@@ -56,6 +57,14 @@ class RecordingViewModel(
 
     fun finish() {
         serviceClient.finish().onFailure(::publishFailure)
+    }
+
+    fun save(metadata: SaveRecordingMetadata) {
+        serviceClient.save(metadata).onFailure(::publishFailure)
+    }
+
+    fun discard() {
+        serviceClient.discard().onFailure(::publishFailure)
     }
 
     private fun publishFailure(failure: Throwable) {

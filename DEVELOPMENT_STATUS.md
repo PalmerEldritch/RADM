@@ -2,9 +2,9 @@
 
 ## Current State
 
-Current milestone: **M8 — Activity Finalization and Library (next; not started)**
+Current milestone: **M9 — Durability and Recovery (next; not started)**
 
-Last completed milestone: **M7 — Final Processors and Summaries**
+Last completed milestone: **M8 — Activity Finalization and Library**
 
 ---
 
@@ -20,7 +20,7 @@ Last completed milestone: **M7 — Final Processors and Summaries**
 | M5 — Location acquisition and live distance | PASS | 2026-09-07 |
 | M6 — Running step acquisition | PASS | 2026-09-07 |
 | M7 — Final processors and summaries | PASS | 2026-09-07 |
-| M8 — Activity finalization and library | NOT_STARTED | — |
+| M8 — Activity finalization and library | PASS | 2026-09-07 |
 | M9 — Durability and recovery | NOT_STARTED | — |
 | M10 — Static Activity Analysis | NOT_STARTED | — |
 | M11 — Synchronized graph analysis | NOT_STARTED | — |
@@ -409,9 +409,74 @@ Deferred verification:
 
 ---
 
+## M8 Implementation Record
+
+Status: **PASS**
+
+Implemented:
+
+- normal startup now opens the persistent Activity Library, while an authoritative
+  in-process recording service state continues to take precedence;
+- the library uses a vertically browsable, newest-first summary projection showing
+  activity type, date, active duration, optional title, distance, and applicable
+  average movement metric where current and available;
+- the Room library query joins only `activities`, `activity_summaries`, and summary
+  processor validity metadata; it neither loads nor issues per-item queries for
+  route, step, cadence, or derived sample streams;
+- stale, failed, or unprocessed physical summary rows are suppressed from both
+  library and activity-detail presentation;
+- Finish opens a dedicated finalization view with recognizable duration/distance,
+  optional title and notes, activity-type correction, clear Save, and secondary
+  Discard protected by explicit destructive confirmation;
+- Save metadata is carried to the foreground-service recording authority, core
+  finalization remains transactional, M7 derived processing runs from retained
+  source data, and successful save returns consistently to the refreshed library;
+- saved entries open a summary-level Activity Analysis header; full static graphs
+  remain correctly assigned to M10;
+- later metadata editing supports type, title, and notes; a type change atomically
+  invalidates prior processor state before deterministic recalculation, while
+  stable identity and all source streams remain unchanged;
+- saved-activity deletion requires explicit confirmation and uses the existing
+  activity-root cascade without affecting other activities;
+- the Android test baseline moved from Espresso 3.5.1 to stable 3.7.0 for Android
+  17 input/test-loop compatibility.
+
+Verification:
+
+- `./gradlew testDebugUnitTest` — PASS (66 tests, 0 failures)
+- `./gradlew connectedDebugAndroidTest` — PASS (37 tests, 0 failures, 3 skipped
+  hardware-only tests) on Pixel_10 AVD, Android 17 / API 37
+- `./gradlew check assembleDebug` — PASS
+- Android lint/static checks and domain dependency boundary scan — PASS
+- Pixel_10 visual smoke — PASS for default empty-library presentation and prominent
+  Start activity entry point
+- on-disk Room close/reopen — PASS for edited type/title/notes, stable UUID, source
+  positions, and source step samples
+
+Relevant verification IDs:
+
+- `VVM-LIB-001..004` — PASS
+- `VVM-REC-008/009` — PASS
+- `VVM-PERF-006` — PASS for the summary-only joined query path
+- `VVM-PROC-010` — PASS for type-edit invalidation/recalculation
+- `VVM-REL-005` — PASS through the existing finalization atomicity coverage
+- `UX-AT-006/007` — PASS on the Pixel_10 emulator
+
+Deferred verification:
+
+- interrupted-process/reboot startup recovery and recovered-session resolution are
+  M9 scope;
+- static route and graph analysis remains M10, with synchronized interaction and
+  map integration in M11/M12;
+- 10,000-entry library performance measurement remains M13; M8 verifies that its
+  query architecture does not load sample streams;
+- no new physical-device claim is made by the M8 emulator UI/database evidence.
+
+---
+
 ## Next Work Item
 
-Begin **M8 — Activity Finalization and Library** according to `RADM-IMP_R00.md`.
+Begin **M9 — Durability and Recovery** according to `RADM-IMP_R00.md`.
 
 ---
 

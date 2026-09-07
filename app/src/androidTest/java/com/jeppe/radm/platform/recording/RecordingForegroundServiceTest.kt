@@ -14,12 +14,15 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.jeppe.radm.MainActivity
 import com.jeppe.radm.RadmApplication
+import com.jeppe.radm.application.recording.SaveRecordingMetadata
 import com.jeppe.radm.domain.model.ActivityType
+import com.jeppe.radm.domain.model.ProcessorName
 import com.jeppe.radm.domain.recording.RecordingState
 import com.jeppe.radm.ui.recording.RecordingViewModel
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -166,6 +169,47 @@ class RecordingForegroundServiceTest {
             assertEquals(RecordingState.RECORDING, resumed.state)
         } finally {
             setLocationEnabled(initiallyEnabled)
+        }
+    }
+
+    @Test
+    fun vvmRec008_saveFinalizesProcessesAndPublishesActivityToLibrary() = runBlocking {
+        application.container.recordingServiceClient.start(ActivityType.RUNNING).getOrThrow()
+        val started = waitForState { it.activeSnapshot()?.state == RecordingState.RECORDING }
+            .activeSnapshot()!!
+        val activityId = requireNotNull(started.activityId)
+        try {
+            application.container.recordingServiceClient.finish().getOrThrow()
+            waitForState { it.activeSnapshot()?.state == RecordingState.FINALIZING }
+            application.container.recordingServiceClient.save(
+                SaveRecordingMetadata(
+                    activityType = ActivityType.CYCLING,
+                    title = "Service-saved ride",
+                    notes = "M8 finalization",
+                ),
+            ).getOrThrow()
+            waitForState { it is RecordingServiceState.Idle }
+
+            val saved = requireNotNull(application.container.activityRepository.get(activityId))
+            assertEquals(ActivityType.CYCLING, saved.type)
+            assertEquals("Service-saved ride", saved.title)
+            assertEquals("M8 finalization", saved.notes)
+            assertNull(application.container.recordingRepository.loadActiveSession())
+            assertNotNull(application.container.activityRepository.getSummary(activityId))
+            assertTrue(application.container.activityRepository.listLibraryItems().any {
+                it.activityId == activityId
+            })
+            listOf(
+                ProcessorName.DISTANCE,
+                ProcessorName.PACE,
+                ProcessorName.SPEED,
+                ProcessorName.CADENCE,
+                ProcessorName.SUMMARY,
+            ).forEach {
+                assertTrue(application.container.activityRepository.isProcessorCurrent(activityId, it))
+            }
+        } finally {
+            application.container.activityRepository.delete(activityId)
         }
     }
 

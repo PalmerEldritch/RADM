@@ -14,6 +14,7 @@ import com.jeppe.radm.R
 import com.jeppe.radm.RadmApplication
 import com.jeppe.radm.application.recording.RecordingController
 import com.jeppe.radm.application.recording.RecordingSnapshot
+import com.jeppe.radm.application.recording.SaveRecordingMetadata
 import com.jeppe.radm.domain.model.ActivityType
 import com.jeppe.radm.domain.recording.RecordingState
 import com.jeppe.radm.platform.location.AndroidLocationSource
@@ -61,7 +62,13 @@ class RecordingForegroundService : Service() {
             RecordingServiceAction.FINISH,
             RecordingServiceAction.SAVE,
             RecordingServiceAction.DISCARD,
-            -> commands.trySend(ServiceCommand.Action(checkNotNull(action)))
+            -> commands.trySend(
+                if (action == RecordingServiceAction.SAVE) {
+                    ServiceCommand.Save(saveMetadata(checkNotNull(intent)))
+                } else {
+                    ServiceCommand.Action(checkNotNull(action))
+                },
+            )
 
             null -> {
                 publishCriticalError(getString(R.string.recording_service_restart_requires_recovery))
@@ -130,14 +137,22 @@ class RecordingForegroundService : Service() {
                     launchElapsedTicker()
                 }
 
+                is ServiceCommand.Save -> {
+                    val saved = controller.save(command.metadata)
+                    runCatching {
+                        (application as RadmApplication).container.recalculateActivity(
+                            saved.id,
+                            checkNotNull(saved.savedAt),
+                        )
+                    }
+                    resolveAndStop()
+                }
+
                 is ServiceCommand.Action -> when (command.action) {
                     RecordingServiceAction.PAUSE -> publish(controller.pause())
                     RecordingServiceAction.RESUME -> publish(controller.resume())
                     RecordingServiceAction.FINISH -> publish(controller.finish())
-                    RecordingServiceAction.SAVE -> {
-                        controller.save()
-                        resolveAndStop()
-                    }
+                    RecordingServiceAction.SAVE -> Unit
 
                     RecordingServiceAction.DISCARD -> {
                         controller.discard()
@@ -239,6 +254,13 @@ class RecordingForegroundService : Service() {
         stopSelf()
     }
 
+    private fun saveMetadata(intent: Intent): SaveRecordingMetadata = SaveRecordingMetadata(
+        activityType = intent.getStringExtra(EXTRA_FINAL_ACTIVITY_TYPE)
+            ?.let { value -> runCatching { ActivityType.valueOf(value) }.getOrNull() },
+        title = intent.getStringExtra(EXTRA_TITLE),
+        notes = intent.getStringExtra(EXTRA_NOTES),
+    )
+
     private fun ActivityType.displayName(): String = when (this) {
         ActivityType.RUNNING -> getString(R.string.activity_type_running)
         ActivityType.CYCLING -> getString(R.string.activity_type_cycling)
@@ -247,11 +269,15 @@ class RecordingForegroundService : Service() {
 
     private sealed interface ServiceCommand {
         data class Start(val activityType: ActivityType) : ServiceCommand
+        data class Save(val metadata: SaveRecordingMetadata) : ServiceCommand
         data class Action(val action: RecordingServiceAction) : ServiceCommand
     }
 
     companion object {
         const val EXTRA_ACTIVITY_TYPE = "activity_type"
+        const val EXTRA_FINAL_ACTIVITY_TYPE = "final_activity_type"
+        const val EXTRA_TITLE = "title"
+        const val EXTRA_NOTES = "notes"
         const val NOTIFICATION_CHANNEL_ID = "recording"
         const val NOTIFICATION_ID = 1001
         private const val ELAPSED_UPDATE_INTERVAL_MS = 250L

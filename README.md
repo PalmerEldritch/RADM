@@ -275,11 +275,11 @@ Verification matrix         Baseline
 Implementation plan         Baseline
 Architecture ADRs 001–009   Accepted
 
-Implementation              M7 complete; M8 is next and not started
+Implementation              M8 complete; M9 is next and not started
 Last local gate             ./gradlew check assembleDebug — PASS (2026-09-07)
-Applicable M7 VVM           PROC-001..010, DB-008/009, REL-002 — PASS
+Applicable M8 VVM           LIB-001..004, REC-008/009, PERF-006 — PASS
 JVM tests                   66 tests — PASS
-Connected Android tests     29 tests — PASS (3 hardware-only skips; Pixel_10 AVD, Android 17 / API 37, 2026-09-07)
+Connected Android tests     37 tests — PASS (3 hardware-only skips; Pixel_10 AVD, Android 17 / API 37, 2026-09-07)
 M5 physical smoke           PASS (Galaxy S24 SM-S921B/DS)
 M6 physical step source     PASS (18 retained events; 17 within-epoch steps)
 ```
@@ -311,7 +311,14 @@ missing metrics remain nullable, and injected optional processor failure cannot
 delete source or invalidate unrelated derived streams. Total ascent remains
 unavailable pending a baselined ascent/noise algorithm.
 
-M7 is complete. M8 — Activity Finalization and Library — is next and has not started.
+M8 delivers the complete record → finish → save → library → reopen workflow. RADM
+now starts in a newest-first, summary-backed Activity Library; finalization accepts
+title, notes, and activity-type correction; saved entries open a summary analysis
+header and support protected editing/deletion. Type changes invalidate and
+recalculate derived applicability without touching source streams, and stale
+summary rows are never presented as current.
+
+M8 is complete. M9 — Durability and Recovery — is next and has not started.
 
 The Android application-backup policy remains intentionally open and must be resolved before R00 release.
 

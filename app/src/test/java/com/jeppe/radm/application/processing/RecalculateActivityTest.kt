@@ -6,6 +6,7 @@ import com.jeppe.radm.domain.model.AbsoluteTimestampUtcMillis
 import com.jeppe.radm.domain.model.ActiveElapsedTimeMillis
 import com.jeppe.radm.domain.model.Activity
 import com.jeppe.radm.domain.model.ActivityId
+import com.jeppe.radm.domain.model.ActivityLibraryItem
 import com.jeppe.radm.domain.model.ActivityProcessorState
 import com.jeppe.radm.domain.model.ActivitySummary
 import com.jeppe.radm.domain.model.ActivityType
@@ -188,6 +189,20 @@ private class FakeActivityRepository(
 
     override suspend fun get(activityId: ActivityId): Activity? = activity?.takeIf { it.id == activityId }
     override suspend fun listSaved(): List<Activity> = listOfNotNull(activity)
+    override suspend fun listLibraryItems(): List<ActivityLibraryItem> = listOfNotNull(
+        activity?.takeIf { it.savedAt != null }?.let { saved ->
+            ActivityLibraryItem(
+                activityId = saved.id,
+                activityType = saved.type,
+                title = saved.title,
+                startedAt = saved.startedAt,
+                activeDuration = saved.activeDuration,
+                distance = summary?.distance,
+                averagePace = summary?.averagePace,
+                averageSpeed = summary?.averageSpeed,
+            )
+        },
+    )
 
     override suspend fun updateMetadata(activityId: ActivityId, update: ActivityMetadataUpdate): Boolean {
         val current = activity?.takeIf { it.id == activityId } ?: return false

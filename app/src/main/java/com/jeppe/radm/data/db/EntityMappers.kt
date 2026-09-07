@@ -1,6 +1,7 @@
 package com.jeppe.radm.data.db
 
 import com.jeppe.radm.data.db.entity.ActivityEntity
+import com.jeppe.radm.data.db.entity.ActivityLibraryItemEntity
 import com.jeppe.radm.data.db.entity.ActivityProcessorStateEntity
 import com.jeppe.radm.data.db.entity.ActivitySummaryEntity
 import com.jeppe.radm.data.db.entity.DerivedCadenceEntity
@@ -15,6 +16,7 @@ import com.jeppe.radm.domain.model.AccuracyMetres
 import com.jeppe.radm.domain.model.ActiveElapsedTimeMillis
 import com.jeppe.radm.domain.model.Activity
 import com.jeppe.radm.domain.model.ActivityId
+import com.jeppe.radm.domain.model.ActivityLibraryItem
 import com.jeppe.radm.domain.model.ActivityProcessorState
 import com.jeppe.radm.domain.model.ActivitySummary
 import com.jeppe.radm.domain.model.ActivityType
@@ -70,6 +72,17 @@ fun ActivityEntity.toDomain() = Activity(
     activeDuration = ActiveElapsedTimeMillis(activeDurationMs),
     createdAt = AbsoluteTimestampUtcMillis(createdAtUtcMs),
     updatedAt = AbsoluteTimestampUtcMillis(updatedAtUtcMs),
+)
+
+fun ActivityLibraryItemEntity.toDomain() = ActivityLibraryItem(
+    activityId = ActivityId.parse(activityId),
+    activityType = ActivityType.valueOf(activityType),
+    title = title,
+    startedAt = AbsoluteTimestampUtcMillis(startedAtUtcMs),
+    activeDuration = ActiveElapsedTimeMillis(activeDurationMs),
+    distance = distanceM?.let(::DistanceMetres),
+    averagePace = averagePaceSPerKm?.let(::PaceSecondsPerKilometre),
+    averageSpeed = averageSpeedMps?.let(::SpeedMetresPerSecond),
 )
 
 fun ActivitySummary.toEntity() = ActivitySummaryEntity(

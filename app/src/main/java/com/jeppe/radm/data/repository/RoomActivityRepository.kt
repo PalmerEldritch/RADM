@@ -27,16 +27,25 @@ class RoomActivityRepository(
 
     override suspend fun listSaved() = activityDao.listSavedActivities().map { it.toDomain() }
 
+    override suspend fun listLibraryItems() = activityDao.listLibraryItems().map { it.toDomain() }
+
     override suspend fun updateMetadata(
         activityId: ActivityId,
         update: ActivityMetadataUpdate,
-    ): Boolean = activityDao.updateMetadata(
-        activityId = activityId.value,
-        activityType = update.type.name,
-        title = update.title,
-        notes = update.notes,
-        updatedAtUtcMs = update.updatedAt.value,
-    ) == 1
+    ): Boolean = database.withWriteTransaction {
+        val existing = activityDao.getActivity(activityId.value) ?: return@withWriteTransaction false
+        val updated = activityDao.updateMetadata(
+            activityId = activityId.value,
+            activityType = update.type.name,
+            title = update.title,
+            notes = update.notes,
+            updatedAtUtcMs = update.updatedAt.value,
+        ) == 1
+        if (updated && existing.activityType != update.type.name) {
+            derivedDao.invalidateProcessorStates(activityId.value)
+        }
+        updated
+    }
 
     override suspend fun delete(activityId: ActivityId): Boolean =
         activityDao.deleteActivity(activityId.value) == 1
