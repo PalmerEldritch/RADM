@@ -66,6 +66,10 @@ The service is not guaranteed to survive process termination, force-stop, or reb
 
 Recording commands and state mutations require serialized handling to avoid lifecycle races.
 
+The location foreground service may be established only when the Android platform prerequisites for that service type are satisfied. In R00, RADM shall therefore not create a timing-only active recording through an alternative foreground-service type when location foreground-service prerequisites are absent at recording start.
+
+Absence of an initial usable geographical fix is distinct from absence of the required platform capability. Once the location foreground service has been validly established, temporary loss or degradation of usable location data shall not by itself invalidate the recording session; active elapsed time and independent measurement streams may continue according to RADM-REC.
+
 ## Related Specifications
 
 - RADM-SRS R00

@@ -528,7 +528,11 @@ The exact location API, requested update interval, accuracy policy, and source a
 
 ## SRS-LOCSTART-001
 
-The user shall be able to start an activity when no usable location measurement is yet available.
+The user shall be able to start an activity without an already available usable geographical location fix, provided the Android platform prerequisites required to establish the recording foreground service are satisfied.
+
+A usable geographical fix shall not itself be a prerequisite for recording start.
+
+If the required foreground-service prerequisites are not satisfied, RADM shall not represent the activity as actively recording and shall identify the blocking capability or permission to the user.
 
 ## SRS-LOCSTART-002
 

@@ -451,6 +451,14 @@ RADM shall use a dedicated Android foreground service for an active recording se
 
 The service shall be configured as a location-type foreground service as required by the supported Android platform behavior.
 
+Establishing a new active recording therefore requires the Android platform prerequisites needed to promote the service using the location foreground-service type.
+
+A usable geographical fix is not required before recording start, but the required location capability and permission state shall permit creation of the location foreground service.
+
+R00 shall not introduce a secondary timing-only foreground-service architecture solely to permit activity start when those location foreground-service prerequisites are absent.
+
+After a valid location foreground service has been established, temporary loss or degradation of usable location measurements shall be handled as acquisition unavailability rather than as automatic termination of the recording session, subject to Android continuing to permit the service to operate.
+
 ## SASM-REC-001
 
 The foreground recording service shall become authoritative for runtime recording execution after a recording begins.

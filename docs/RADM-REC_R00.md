@@ -642,13 +642,23 @@ The app shall not silently treat approximate/coarse location as equivalent to no
 
 # 36. Coarse-Only Location
 
-If Android grants only approximate/coarse location and the resulting measurements fail RADM's normal route-quality policy:
+If Android grants only approximate/coarse location:
 
-- recording may still start;
-- active elapsed time may still be retained;
-- route-dependent metrics may remain unavailable;
-- the user shall be informed that precise location is unavailable.
+* the required location foreground service may still be started where Android permits;
+* recording may start;
+* active elapsed time may begin normally;
+* RADM shall identify that precise location is unavailable.
 
+Coarse/approximate location measurements shall be evaluated using the normal R00 location-acceptance policy.
+
+If the resulting measurements do not satisfy the normal route-quality policy:
+
+* route-dependent source data and metrics may remain unavailable;
+* the recording session shall remain valid;
+* active elapsed time and independent measurement streams shall continue where applicable;
+* the user shall be informed that precise location is unavailable.
+
+RADM shall not silently treat approximate/coarse location as equivalent to normal precise outdoor activity recording.
 ---
 
 # 37. Background Location Permission Strategy
@@ -663,14 +673,27 @@ If later platform verification demonstrates a concrete R00 behavior requiring ba
 
 # 38. Location Services Disabled
 
-If system location services are disabled:
+If system location services are disabled before a new activity is started:
 
-- the user may still start the activity;
-- recording time shall function;
-- route/distance/pace/speed shall remain unavailable;
-- RADM shall indicate location unavailability.
+* RADM shall not begin the recording session;
+* RADM shall not represent the activity as actively recording;
+* the user shall receive a recording-critical indication that location services must be enabled before recording can start.
 
-Re-enabling location services during the activity shall permit normal acquisition to begin without restarting the activity.
+A usable geographical fix is not required once the Android platform prerequisites for the required location foreground service are satisfied.
+
+If system location services become unavailable after an activity has successfully started:
+
+* the recording session shall remain active where Android permits the already-established foreground service to continue;
+* active elapsed time shall continue while the session remains `RECORDING`;
+* route, distance, pace, speed, and other location-dependent measurements shall remain unavailable while usable location data is absent;
+* RADM shall indicate location unavailability;
+* no geographical samples shall be fabricated for the unavailable interval.
+
+If usable location acquisition later resumes during the same recording:
+
+* normal location acceptance shall resume automatically;
+* the user shall not be required to restart the activity;
+* route-segment handling shall follow the normal location-gap rules defined by this specification.
 
 ---
 
