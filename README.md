@@ -275,11 +275,11 @@ Verification matrix         Baseline
 Implementation plan         Baseline
 Architecture ADRs 001–009   Accepted
 
-Implementation              M6 complete; M7 is next and not started
+Implementation              M7 complete; M8 is next and not started
 Last local gate             ./gradlew check assembleDebug — PASS (2026-09-07)
-Applicable M6 VVM           STEP-001..007, PERM-002, REL-003 — PASS
-JVM tests                   51 tests — PASS
-Connected Android tests     26 tests — PASS (2 opt-in device/field skips; Galaxy S24, Android 16 / API 36, 2026-09-07)
+Applicable M7 VVM           PROC-001..010, DB-008/009, REL-002 — PASS
+JVM tests                   66 tests — PASS
+Connected Android tests     29 tests — PASS (3 hardware-only skips; Pixel_10 AVD, Android 17 / API 37, 2026-09-07)
 M5 physical smoke           PASS (Galaxy S24 SM-S921B/DS)
 M6 physical step source     PASS (18 retained events; 17 within-epoch steps)
 ```
@@ -304,7 +304,14 @@ positive 17-step within-epoch delta through the production foreground service an
 Room path. See
 [`verification/reports/2026-09-07_s24_VVM-M6-steps.md`](verification/reports/2026-09-07_s24_VVM-M6-steps.md).
 
-M6 is complete. M7 — Final Processors and Summaries — is next and has not started.
+M7 adds deterministic final distance, centred pace/speed, Running cadence, and
+activity-summary processors plus processor-version-aware Room replacement from
+retained source streams. Route and counter-epoch discontinuities are preserved,
+missing metrics remain nullable, and injected optional processor failure cannot
+delete source or invalidate unrelated derived streams. Total ascent remains
+unavailable pending a baselined ascent/noise algorithm.
+
+M7 is complete. M8 — Activity Finalization and Library — is next and has not started.
 
 The Android application-backup policy remains intentionally open and must be resolved before R00 release.
 

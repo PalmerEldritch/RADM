@@ -42,6 +42,7 @@ interface ActivityRepository {
     suspend fun updateProcessorVersion(name: ProcessorName, version: Int): Boolean
     suspend fun getProcessorStates(activityId: ActivityId): List<ActivityProcessorState>
     suspend fun isProcessorCurrent(activityId: ActivityId, name: ProcessorName): Boolean
+    suspend fun putProcessorStates(states: List<ActivityProcessorState>)
 
     suspend fun replaceTrackMetrics(
         activityId: ActivityId,
@@ -52,6 +53,12 @@ interface ActivityRepository {
     suspend fun replaceCadence(
         activityId: ActivityId,
         samples: List<CadenceSample>,
+        processorState: ActivityProcessorState,
+    )
+
+    suspend fun replaceSummary(
+        activityId: ActivityId,
+        summary: ActivitySummary,
         processorState: ActivityProcessorState,
     )
 

@@ -83,6 +83,16 @@ class RoomActivityRepository(
             joined.processorVersion == joined.currentProcessorVersion
     }
 
+    override suspend fun putProcessorStates(states: List<ActivityProcessorState>) {
+        if (states.isEmpty()) return
+        require(states.map { it.activityId }.distinct().size == 1) {
+            "A processor-state batch must have one activity owner"
+        }
+        database.withWriteTransaction {
+            states.forEach { derivedDao.upsertProcessorState(it.toEntity()) }
+        }
+    }
+
     override suspend fun replaceTrackMetrics(
         activityId: ActivityId,
         metrics: List<DerivedTrackMetric>,
@@ -116,6 +126,22 @@ class RoomActivityRepository(
             if (samples.isNotEmpty()) {
                 derivedDao.insertCadence(samples.map { it.toEntity() })
             }
+            derivedDao.upsertProcessorState(processorState.toEntity())
+        }
+    }
+
+    override suspend fun replaceSummary(
+        activityId: ActivityId,
+        summary: ActivitySummary,
+        processorState: ActivityProcessorState,
+    ) {
+        require(summary.activityId == activityId) { "Summary must belong to the activity" }
+        require(processorState.activityId == activityId) { "Processor state must belong to the activity" }
+        require(processorState.processorName == ProcessorName.SUMMARY) {
+            "Summary replacement requires summary processor state"
+        }
+        database.withWriteTransaction {
+            activityDao.upsertSummary(summary.toEntity())
             derivedDao.upsertProcessorState(processorState.toEntity())
         }
     }

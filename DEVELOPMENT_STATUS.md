@@ -2,9 +2,9 @@
 
 ## Current State
 
-Current milestone: **M7 — Final Processors and Summaries (next; not started)**
+Current milestone: **M8 — Activity Finalization and Library (next; not started)**
 
-Last completed milestone: **M6 — Running Step Acquisition**
+Last completed milestone: **M7 — Final Processors and Summaries**
 
 ---
 
@@ -19,7 +19,7 @@ Last completed milestone: **M6 — Running Step Acquisition**
 | M4 — Foreground-service recording shell | PASS | 2026-09-06 |
 | M5 — Location acquisition and live distance | PASS | 2026-09-07 |
 | M6 — Running step acquisition | PASS | 2026-09-07 |
-| M7 — Final processors and summaries | NOT_STARTED | — |
+| M7 — Final processors and summaries | PASS | 2026-09-07 |
 | M8 — Activity finalization and library | NOT_STARTED | — |
 | M9 — Durability and recovery | NOT_STARTED | — |
 | M10 — Static Activity Analysis | NOT_STARTED | — |
@@ -337,9 +337,81 @@ Deferred verification:
 
 ---
 
+## M7 Implementation Record
+
+Status: **PASS**
+
+Implemented:
+
+- Android-independent final processors recalculate cumulative WGS84 haversine
+  distance from retained accepted positions without adding distance across route
+  segments;
+- Running and Cross-country skiing pace and Cycling speed use position-aligned,
+  approximately centred 10-second final windows with interpolation confined to one
+  continuous route segment;
+- Running cadence uses an approximately 10-second trailing window over cumulative
+  step deltas, interpolates within a counter epoch, and never crosses reset or
+  pause/resume epoch boundaries;
+- invalid timing, stationary movement, insufficient windows, missing route,
+  missing steps, and missing elevation use nullable/unavailable semantics without
+  producing non-finite persisted user metrics;
+- activity summaries derive distance, activity-type-appropriate average pace or
+  speed from canonical active duration, and available source min/max elevation;
+- the application-layer recalculation workflow initializes all five per-activity
+  processor states, uses the current seeded processor definitions, reloads retained
+  source streams, and transactionally replaces track, cadence, and summary outputs
+  with their corresponding state;
+- `CURRENT`, `UNPROCESSED`, `FAILED`, and version-mismatch staleness are exercised;
+  an optional processor failure retains source data and allows unrelated derived
+  streams to remain current;
+- Running-to-Cycling reprocessing replaces pace with speed applicability, removes
+  derived Running cadence, and leaves positions and step source measurements
+  unchanged.
+
+Verification:
+
+- `./gradlew testDebugUnitTest` — PASS (66 tests, 0 failures)
+- `./gradlew connectedDebugAndroidTest` — PASS (29 tests, 0 failures, 3 skipped
+  hardware-only tests) on Pixel_10 AVD, Android 17 / API 37
+- `./gradlew check assembleDebug` — PASS
+- Android lint/static checks and domain dependency boundary scan — PASS
+- Room recalculation/replacement, currentness, source retention, and processor
+  failure isolation — PASS on the API 37 emulator
+
+Relevant verification IDs:
+
+- `VVM-PROC-001..010` — PASS
+- `VVM-DB-008/009` — PASS
+- `VVM-REL-002` — PASS with injected optional cadence failure
+- `VVM-ARCH-001/002` — PASS for the new final processor layer
+
+Specification interpretation / limitation:
+
+- affected sources: `RADM-IMP_R00.md` M7 Summary Processor,
+  `RADM-SRS_R00.md` `SRS-SUM-003`, and `RADM-DMS_R00.md`
+  `activity_summaries.total_ascent_m`;
+- observed gap: R00 permits climb-related summary information and says total ascent
+  is applicable "where defined", but no baselined document defines an elevation
+  correction, noise threshold, smoothing rule, or ascent accumulation algorithm;
+- implementation impact: source min/max elevation is derived, while
+  `total_ascent_m` remains `NULL` rather than embedding an undocumented algorithm;
+- proposed resolution: baseline an explicit ascent processor policy before making
+  total ascent available or version-changing its persisted semantics.
+
+Deferred verification:
+
+- no physical-device claim is made for deterministic final processing; its core
+  behavior is proven at JVM level and its Room path on the emulator;
+- finalization-trigger integration and library presentation remain M8;
+- recovery-driven recalculation remains M9;
+- 100,000-point performance evidence remains M13 and reference-device load/field
+  validation remains M14.
+
+---
+
 ## Next Work Item
 
-Begin **M7 — Final Processors and Summaries** according to `RADM-IMP_R00.md`.
+Begin **M8 — Activity Finalization and Library** according to `RADM-IMP_R00.md`.
 
 ---
 
