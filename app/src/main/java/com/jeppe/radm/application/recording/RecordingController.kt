@@ -350,7 +350,10 @@ class RecordingController(
         val current = checkNotNull(runtime)
         runCatching { locationSource.start(::acceptLocation) }
             .onFailure { current.locationProcessor.providerUnavailable() }
-        if (activityType == ActivityType.RUNNING) stepSource.start(::acceptStep)
+        if (activityType == ActivityType.RUNNING) {
+            // Step capability is optional; denial, absence, or adapter failure must not abort recording.
+            runCatching { stepSource.start(::acceptStep) }
+        }
     }
 
     private suspend fun stopApplicableSources(activityType: ActivityType) {

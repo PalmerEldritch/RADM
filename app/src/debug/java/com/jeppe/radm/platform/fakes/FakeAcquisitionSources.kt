@@ -85,9 +85,12 @@ class FakeStepSource : StepSource {
     var stopCount: Int = 0
         private set
 
+    var startFailure: RuntimeException? = null
+
     private var consumer: (suspend (StepMeasurement) -> Unit)? = null
 
     override suspend fun start(consumer: suspend (StepMeasurement) -> Unit) {
+        startFailure?.let { throw it }
         this.consumer = consumer
         isStarted = true
         startCount += 1

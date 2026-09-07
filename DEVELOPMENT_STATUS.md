@@ -2,9 +2,9 @@
 
 ## Current State
 
-Current milestone: **M6 — Running Step Acquisition (next; not started)**
+Current milestone: **M7 — Final Processors and Summaries (next; not started)**
 
-Last completed milestone: **M5 — Location Acquisition and Live Distance**
+Last completed milestone: **M6 — Running Step Acquisition**
 
 ---
 
@@ -18,7 +18,7 @@ Last completed milestone: **M5 — Location Acquisition and Live Distance**
 | M3 — Recording state machine with fake sources | PASS | 2026-09-06 |
 | M4 — Foreground-service recording shell | PASS | 2026-09-06 |
 | M5 — Location acquisition and live distance | PASS | 2026-09-07 |
-| M6 — Running step acquisition | NOT_STARTED | — |
+| M6 — Running step acquisition | PASS | 2026-09-07 |
 | M7 — Final processors and summaries | NOT_STARTED | — |
 | M8 — Activity finalization and library | NOT_STARTED | — |
 | M9 — Durability and recovery | NOT_STARTED | — |
@@ -279,9 +279,67 @@ Deferred verification:
 
 ---
 
+## M6 Implementation Record
+
+Status: **PASS**
+
+Implemented:
+
+- a phone-native `Sensor.TYPE_STEP_COUNTER` adapter now supplies the foreground
+  recording service through the existing source-neutral `StepSource` boundary;
+- sensor timestamps are mapped from Android elapsed-realtime nanoseconds to both
+  monotonic milliseconds and corresponding UTC source time without exposing
+  `SensorEvent` outside the platform adapter;
+- a pure domain counter processor retains the initial cumulative value as epoch-zero
+  baseline, exposes only comparable within-epoch deltas, rejects malformed and
+  duplicate/reordered events, and creates a new epoch on counter decrease;
+- restarting acquisition after pause marks the next accepted value as a fresh
+  baseline and new epoch, preventing paused steps from contributing to a future
+  active cadence window;
+- only Running starts the step source; Cycling and Cross-country skiing retain no
+  phone step samples;
+- absent sensor, denied activity-recognition capability, listener registration
+  failure, and later optional-source loss do not stop active time, location, or
+  unrelated recording data;
+- retained step events preserve zero-based source order, counter epoch, UTC time,
+  active elapsed time, and cumulative count in Room without synthetic regular
+  samples;
+- an explicit opt-in physical field test exercises the actual production service,
+  Samsung step counter, controller buffering, Finish flush, and Room persistence.
+
+Verification:
+
+- `./gradlew testDebugUnitTest` — PASS (51 tests, 0 failures)
+- `./gradlew connectedDebugAndroidTest` — PASS (26 tests, 0 failures, 2 skipped
+  opt-in device/field tests) on the Samsung Galaxy S24
+- explicit `VVM-FIELD-006` run — PASS: 18 retained cumulative events and 17
+  comparable within-epoch steps during the controlled movement window
+- `./gradlew check assembleDebug` — PASS
+- Android lint/static checks and domain dependency boundary scan — PASS
+- physical-device evidence —
+  `verification/reports/2026-09-07_s24_VVM-M6-steps.md`
+
+Relevant verification IDs:
+
+- `VVM-STEP-001..007` — PASS
+- `VVM-PERM-002` — PASS
+- `VVM-REL-003` — PASS
+- `VVM-FIELD-006` — PASS for source integration on the primary reference device
+
+Deferred verification:
+
+- the approximately 10-second rolling cadence processor, versioned derived cadence,
+  and activity summaries begin in M7;
+- interrupted/reboot recovery execution remains M9; the M6 adapter exposes the
+  new-baseline behavior required when acquisition restarts;
+- longer Running, screen-off, endurance, battery, and broad field validation remain
+  assigned to M14.
+
+---
+
 ## Next Work Item
 
-Begin **M6 — Running Step Acquisition** according to `RADM-IMP_R00.md`.
+Begin **M7 — Final Processors and Summaries** according to `RADM-IMP_R00.md`.
 
 ---
 

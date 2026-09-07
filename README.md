@@ -275,12 +275,13 @@ Verification matrix         Baseline
 Implementation plan         Baseline
 Architecture ADRs 001–009   Accepted
 
-Implementation              M5 complete; M6 is next and not started
+Implementation              M6 complete; M7 is next and not started
 Last local gate             ./gradlew check assembleDebug — PASS (2026-09-07)
-Applicable M5 VVM           REC-003/004, LOC-001..010, PERM-001, REL-004 — PASS
-JVM tests                   44 tests — PASS
-Connected Android tests     21 tests — PASS (Galaxy S24, Android 16 / API 36, 2026-09-07)
+Applicable M6 VVM           STEP-001..007, PERM-002, REL-003 — PASS
+JVM tests                   51 tests — PASS
+Connected Android tests     26 tests — PASS (2 opt-in device/field skips; Galaxy S24, Android 16 / API 36, 2026-09-07)
 M5 physical smoke           PASS (Galaxy S24 SM-S921B/DS)
+M6 physical step source     PASS (18 retained events; 17 within-epoch steps)
 ```
 
 M5 adds the phone-native GPS adapter, a deterministic source-neutral acceptance
@@ -294,8 +295,16 @@ started before a fix, acquired and persisted real GPS data, advanced live distan
 survived controlled location loss, and resumed acquisition in the same activity.
 See [`verification/reports/2026-09-07_s24_VVM-M5-smoke.md`](verification/reports/2026-09-07_s24_VVM-M5-smoke.md).
 
-M5 is complete. M6 — Running Step Acquisition — is the next milestone and has not
-started.
+M6 replaces the no-op step shell with the production Android cumulative step-counter
+adapter for Running. Baseline and reset epochs are resolved in Android-independent
+logic, pause/resume starts a fresh comparable regime, raw cumulative events remain
+durable source data, and missing or denied optional step capability cannot end
+recording. The paired Galaxy S24 field check retained 18 real source events with a
+positive 17-step within-epoch delta through the production foreground service and
+Room path. See
+[`verification/reports/2026-09-07_s24_VVM-M6-steps.md`](verification/reports/2026-09-07_s24_VVM-M6-steps.md).
+
+M6 is complete. M7 — Final Processors and Summaries — is next and has not started.
 
 The Android application-backup policy remains intentionally open and must be resolved before R00 release.
 

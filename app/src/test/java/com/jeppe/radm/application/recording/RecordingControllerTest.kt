@@ -140,14 +140,50 @@ class RecordingControllerTest {
 
     @Test
     fun `non Running recording never starts or retains fake step input`() = runBlocking {
-        val fixture = Fixture()
-        fixture.controller.start(ActivityType.CYCLING)
+        listOf(ActivityType.CYCLING, ActivityType.CROSS_COUNTRY_SKIING).forEach { activityType ->
+            val fixture = Fixture()
+            fixture.controller.start(activityType)
 
-        assertFalse(fixture.steps.isStarted)
-        assertThrows(IllegalStateException::class.java) {
-            runBlocking { fixture.steps.emitDelayed(fixture.stepMeasurement(100L)) }
+            assertFalse(fixture.steps.isStarted)
+            assertThrows(IllegalStateException::class.java) {
+                runBlocking { fixture.steps.emitDelayed(fixture.stepMeasurement(100L)) }
+            }
+            fixture.controller.finish()
+            assertTrue(fixture.repository.steps.isEmpty())
         }
+    }
+
+    @Test
+    fun `VVM STEP 004 and PERM 002 unavailable step source does not affect Running`() = runBlocking {
+        val fixture = Fixture()
+        fixture.steps.startFailure = SecurityException("Activity recognition denied")
+
+        val started = fixture.controller.start(ActivityType.RUNNING)
+        fixture.clock.advance(1_000L)
+        fixture.emitLocation(59.3293, 18.0686)
+        fixture.controller.finish()
+
+        assertEquals(RecordingState.RECORDING, started.state)
+        assertEquals(1, fixture.repository.positions.size)
         assertTrue(fixture.repository.steps.isEmpty())
+    }
+
+    @Test
+    fun `VVM REL 003 step acquisition failure preserves source data and location recording`() = runBlocking {
+        val fixture = Fixture()
+        fixture.controller.start(ActivityType.RUNNING)
+        fixture.clock.advance(1_000L)
+        fixture.emitSteps(100L)
+
+        fixture.steps.stop()
+        fixture.clock.advance(1_000L)
+        fixture.emitLocation(59.3293, 18.0686)
+        val active = fixture.controller.snapshot()
+        fixture.controller.finish()
+
+        assertEquals(RecordingState.RECORDING, active.state)
+        assertEquals(1, fixture.repository.positions.size)
+        assertEquals(1, fixture.repository.steps.size)
     }
 
     @Test
