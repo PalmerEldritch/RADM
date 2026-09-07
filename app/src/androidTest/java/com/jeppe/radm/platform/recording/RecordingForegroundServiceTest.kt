@@ -5,6 +5,7 @@ import android.app.Notification
 import android.app.NotificationManager
 import android.content.Context
 import android.os.Build
+import android.os.ParcelFileDescriptor
 import android.os.SystemClock
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.Lifecycle
@@ -117,6 +118,57 @@ class RecordingForegroundServiceTest {
         }
     }
 
+    @Test
+    fun srsLocstart001_disabledLocationServicesBlockStartBeforeDurableSession() = runBlocking {
+        val initiallyEnabled = application.container.recordingCapabilityChecker.current().locationServicesEnabled
+        try {
+            setLocationEnabled(false)
+            waitForCapability { !it.locationServicesEnabled }
+
+            val result = application.container.recordingServiceClient.start(ActivityType.CYCLING)
+            val error = waitForState { it is RecordingServiceState.CriticalError }
+
+            assertTrue(result.isFailure)
+            assertTrue((error as RecordingServiceState.CriticalError).message.contains("location", ignoreCase = true))
+            assertNull(application.container.recordingRepository.loadActiveSession())
+        } finally {
+            setLocationEnabled(initiallyEnabled)
+        }
+    }
+
+    @Test
+    fun vvmRel004_locationServicesLossAfterStartDoesNotInvalidateRecording() {
+        val initiallyEnabled = application.container.recordingCapabilityChecker.current().locationServicesEnabled
+        try {
+            setLocationEnabled(true)
+            waitForCapability { it.locationServicesEnabled }
+            application.container.recordingServiceClient.start(ActivityType.CYCLING).getOrThrow()
+            val started = waitForState { it.activeSnapshot()?.state == RecordingState.RECORDING }
+                .activeSnapshot()!!
+
+            setLocationEnabled(false)
+            val unavailable = waitForState {
+                it.activeSnapshot()?.locationAvailability ==
+                    com.jeppe.radm.domain.location.LocationAvailability.UNAVAILABLE
+            }.activeSnapshot()!!
+
+            assertEquals(started.activityId, unavailable.activityId)
+            assertEquals(RecordingState.RECORDING, unavailable.state)
+            assertTrue(unavailable.activeElapsedTime >= started.activeElapsedTime)
+
+            setLocationEnabled(true)
+            val resumed = waitForState {
+                val availability = it.activeSnapshot()?.locationAvailability
+                availability == com.jeppe.radm.domain.location.LocationAvailability.ACQUIRING ||
+                    availability == com.jeppe.radm.domain.location.LocationAvailability.AVAILABLE
+            }.activeSnapshot()!!
+            assertEquals(started.activityId, resumed.activityId)
+            assertEquals(RecordingState.RECORDING, resumed.state)
+        } finally {
+            setLocationEnabled(initiallyEnabled)
+        }
+    }
+
     private fun assertForegroundNotificationContains(expectedText: String) {
         val manager = context.getSystemService(NotificationManager::class.java)
         val notification = waitForNotification(manager, expectedText)
@@ -164,6 +216,24 @@ class RecordingForegroundServiceTest {
             SystemClock.sleep(25L)
         } while (SystemClock.elapsedRealtime() < deadline)
         error("Timed out waiting for recording state; current=${application.container.recordingStateStore.state.value}")
+    }
+
+    private fun waitForCapability(
+        predicate: (com.jeppe.radm.platform.permissions.RecordingCapabilities) -> Boolean,
+    ) {
+        val deadline = SystemClock.elapsedRealtime() + 10_000L
+        do {
+            if (predicate(application.container.recordingCapabilityChecker.current())) return
+            SystemClock.sleep(50L)
+        } while (SystemClock.elapsedRealtime() < deadline)
+        error("Timed out waiting for recording capability state")
+    }
+
+    private fun setLocationEnabled(enabled: Boolean) {
+        val descriptor = InstrumentationRegistry.getInstrumentation().uiAutomation.executeShellCommand(
+            "cmd location set-location-enabled $enabled",
+        )
+        ParcelFileDescriptor.AutoCloseInputStream(descriptor).use { it.readBytes() }
     }
 
     private fun RecordingServiceState.activeSnapshot() =

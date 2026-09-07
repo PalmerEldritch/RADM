@@ -275,23 +275,27 @@ Verification matrix         Baseline
 Implementation plan         Baseline
 Architecture ADRs 001–009   Accepted
 
-Implementation              M5 implemented; physical exit verification blocked
-Last local gate             ./gradlew check assembleDebug — PASS (2026-09-06)
-Applicable M5 VVM           LOC-001..010, REC-003/004, REL-004 — automated scope PASS
-JVM tests                   41 tests — PASS
-Connected Android tests     19 tests — PASS (Pixel_10 AVD, API 37, 2026-09-06)
-M5 blocked verification     Real-phone smoke; complete PERM-001 degraded start
+Implementation              M5 complete; M6 is next and not started
+Last local gate             ./gradlew check assembleDebug — PASS (2026-09-07)
+Applicable M5 VVM           REC-003/004, LOC-001..010, PERM-001, REL-004 — PASS
+JVM tests                   44 tests — PASS
+Connected Android tests     21 tests — PASS (Galaxy S24, Android 16 / API 36, 2026-09-07)
+M5 physical smoke           PASS (Galaxy S24 SM-S921B/DS)
 ```
 
 M5 adds the phone-native GPS adapter, a deterministic source-neutral acceptance
 pipeline, accepted-only persistence, location availability state, 15-second
-route-gap segmentation, and provisional haversine live distance. An API 37
-emulator smoke through the actual UI and production adapter reached Location
-available and advanced live distance with injected GNSS fixes. M5 is not marked
-complete because no physical phone is connected for its real-device exit
-sequence, and the documented location-FGS/timing-only conflict blocks complete
-`VVM-PERM-001`. M6 shall not start until those M5 items are resolved or an
-explicit approved deviation/change is recorded.
+route-gap segmentation, and provisional haversine live distance. The revised
+recording-start contract is enforced before launching the location foreground
+service: approximate/coarse location may start with explicit reduced capability,
+an existing usable fix is not required, and absent location-FGS prerequisites
+block Start without creating a recording. On the Galaxy S24, the production path
+started before a fix, acquired and persisted real GPS data, advanced live distance,
+survived controlled location loss, and resumed acquisition in the same activity.
+See [`verification/reports/2026-09-07_s24_VVM-M5-smoke.md`](verification/reports/2026-09-07_s24_VVM-M5-smoke.md).
+
+M5 is complete. M6 — Running Step Acquisition — is the next milestone and has not
+started.
 
 The Android application-backup policy remains intentionally open and must be resolved before R00 release.
 

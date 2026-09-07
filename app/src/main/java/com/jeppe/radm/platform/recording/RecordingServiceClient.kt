@@ -2,12 +2,15 @@ package com.jeppe.radm.platform.recording
 
 import android.content.Context
 import android.content.Intent
+import com.jeppe.radm.R
 import com.jeppe.radm.domain.model.ActivityType
+import com.jeppe.radm.platform.permissions.RecordingCapabilityChecker
 
 /** User-visible command entry point. It never mutates recording state itself. */
 class RecordingServiceClient(
     context: Context,
     private val stateStore: RecordingServiceStateStore,
+    private val capabilityChecker: RecordingCapabilityChecker,
 ) {
     private val applicationContext = context.applicationContext
 
@@ -15,6 +18,13 @@ class RecordingServiceClient(
         val current = stateStore.state.value
         if (current is RecordingServiceState.Starting || current is RecordingServiceState.Active) {
             return Result.failure(IllegalStateException("A recording service session already exists"))
+        }
+        if (!capabilityChecker.current().canStartLocationForegroundService) {
+            val failure = IllegalStateException(
+                applicationContext.getString(R.string.recording_service_location_capability_required),
+            )
+            stateStore.publish(RecordingServiceState.CriticalError(checkNotNull(failure.message)))
+            return Result.failure(failure)
         }
         stateStore.publish(RecordingServiceState.Starting(activityType))
         return runCatching {

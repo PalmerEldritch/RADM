@@ -15,6 +15,10 @@ class RadmContainer(application: Application) {
     val database by lazy { RadmDatabaseFactory.create(application) }
     val recordingRepository by lazy { RoomRecordingRepository(database) }
     val recordingStateStore = RecordingServiceStateStore()
-    val recordingServiceClient = RecordingServiceClient(application, recordingStateStore)
     val recordingCapabilityChecker = RecordingCapabilityChecker(application)
+    val recordingServiceClient = RecordingServiceClient(
+        application,
+        recordingStateStore,
+        recordingCapabilityChecker,
+    )
 }
