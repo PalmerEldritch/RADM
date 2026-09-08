@@ -2,7 +2,7 @@
 
 ## Current State
 
-Current milestone: **M9 — Durability and Recovery (next; not started)**
+Current milestone: **M9 — Durability and Recovery (automated scope PASS; assisted reboot closure BLOCKED)**
 
 Last completed milestone: **M8 — Activity Finalization and Library**
 
@@ -21,7 +21,7 @@ Last completed milestone: **M8 — Activity Finalization and Library**
 | M6 — Running step acquisition | PASS | 2026-09-07 |
 | M7 — Final processors and summaries | PASS | 2026-09-07 |
 | M8 — Activity finalization and library | PASS | 2026-09-07 |
-| M9 — Durability and recovery | NOT_STARTED | — |
+| M9 — Durability and recovery | IN_PROGRESS | Automated/stationary scope PASS 2026-09-08; reboot closure BLOCKED |
 | M10 — Static Activity Analysis | NOT_STARTED | — |
 | M11 — Synchronized graph analysis | NOT_STARTED | — |
 | M12 — Map integration and full synchronization | NOT_STARTED | — |
@@ -474,9 +474,73 @@ Deferred verification:
 
 ---
 
+## M9 Implementation Record
+
+Status: **IN_PROGRESS — automated/stationary scope PASS; assisted reboot closure BLOCKED**
+
+Implemented:
+
+- accepted source data flushes after approximately five seconds or 20 samples per
+  stream, and the foreground-service ticker checkpoints active time even without a
+  source callback;
+- recording source/session writes use one initial attempt plus three bounded
+  retries with short backoff;
+- exhausted retries stop acquisition, preserve already committed data, and expose
+  a user-visible recoverable critical state instead of continuing with a false
+  durability indication;
+- application startup checks the single durable unresolved Room session before
+  presenting normal idle/library navigation;
+- recovery presents identifying activity type, start date/time, retained active
+  duration, retained distance where available, and source counts;
+- recovery Resume preserves UUID and source data, creates `RECOVERY_RESUME`, starts
+  a new route segment and Running counter epoch, and continues from the durable
+  active-time checkpoint without counting interruption downtime;
+- recovery Finish/Save finalizes the retained portion using the last trustworthy
+  captured boundary; recovery Discard has destructive confirmation;
+- finalizing sessions interrupted before Save remain recoverable and cannot be
+  incorrectly resumed.
+
+Verification:
+
+- `./gradlew check assembleDebug` — PASS;
+- JVM tests — PASS (77 tests, 0 failures);
+- direct AndroidJUnitRunner suite — PASS on Samsung Galaxy S24 SM-S921B/DS,
+  Android 16 / API 36 (42 tests, 0 failures, 2 skipped explicit opt-in
+  human/device cases);
+- stationary production UI → foreground service → durable checkpoints → ADB
+  force-stop → cold launch → recovery UI → Resume retained the same UUID;
+- `git diff --check` — PASS;
+- evidence —
+  `verification/reports/2026-09-08_s24_VVM-M9-automated.md`.
+
+Relevant verification IDs:
+
+- `VVM-RECOV-001..004` — PASS at deterministic/Room/Android levels;
+- `VVM-DUR-001..005` — PASS;
+- `VVM-REL-005` — PASS for normal and recovery save atomicity;
+- `UX-AT-009` — PASS;
+- `VVM-RECOV-005/006` — BLOCKED pending assisted S24 reboot execution.
+
+Known limitations / blocked verification:
+
+- the M9 exit criterion explicitly requires reference-device reboot recovery;
+  automatic post-boot acquisition is not required, but manual unlock, relaunch,
+  Resume, and post-reboot source checks are required;
+- the stationary physical process-loss smoke retained time checkpoints but no GNSS
+  or step samples; real-source process/reboot evidence remains deferred while
+  deterministic retained-source coverage passes;
+- the Gradle connected-device UTP wrapper encountered a missing
+  `androidx.test.services` helper before test execution on this phone; installing
+  the built app/test APKs and invoking AndroidJUnitRunner directly completed all
+  non-opt-in tests successfully.
+
+---
+
 ## Next Work Item
 
-Begin **M9 — Durability and Recovery** according to `RADM-IMP_R00.md`.
+Complete assisted Samsung Galaxy S24 `VVM-RECOV-005/006` reboot recovery and
+post-reboot Resume verification. Do not mark M9 complete until that reference-device
+exit criterion passes.
 
 ---
 

@@ -2,6 +2,7 @@ package com.jeppe.radm.ui.recording
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewModelScope
 import com.jeppe.radm.RadmContainer
 import com.jeppe.radm.application.recording.SaveRecordingMetadata
 import com.jeppe.radm.domain.model.ActivityType
@@ -11,6 +12,9 @@ import com.jeppe.radm.platform.recording.RecordingServiceState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class RecordingViewModel(
     private val serviceClient: RecordingServiceClient,
@@ -53,6 +57,33 @@ class RecordingViewModel(
 
     fun resume() {
         serviceClient.resume().onFailure(::publishFailure)
+    }
+
+    fun resumeRecovery() {
+        refreshCapabilities()
+        serviceClient.resumeRecovery().onFailure(::publishFailure)
+    }
+
+    fun finishAndSaveRecovery() {
+        viewModelScope.launch {
+            mutableMessage.value = null
+            runCatching {
+                withContext(Dispatchers.IO) { container.recordingRecovery.finishAndSave() }
+            }.onSuccess {
+                container.recordingStateStore.publish(RecordingServiceState.Idle)
+            }.onFailure(::publishFailure)
+        }
+    }
+
+    fun discardRecovery() {
+        viewModelScope.launch {
+            mutableMessage.value = null
+            runCatching {
+                withContext(Dispatchers.IO) { container.recordingRecovery.discard() }
+            }.onSuccess {
+                container.recordingStateStore.publish(RecordingServiceState.Idle)
+            }.onFailure(::publishFailure)
+        }
     }
 
     fun finish() {

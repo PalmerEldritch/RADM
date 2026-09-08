@@ -304,7 +304,140 @@ class RecordingControllerTest {
         assertTrue(fixture.steps.isStarted)
     }
 
-    private class Fixture {
+    @Test
+    fun `VVM DUR 001 periodic checkpoint persists active time without source callbacks`() = runBlocking {
+        val fixture = Fixture()
+        fixture.controller.start(ActivityType.CYCLING)
+
+        fixture.clock.advance(4_999L)
+        fixture.controller.checkpointIfDue()
+        assertEquals(0, fixture.repository.checkpointAttempts)
+        assertEquals(0L, fixture.repository.session?.activeElapsedTime?.value)
+
+        fixture.clock.advance(1L)
+        fixture.controller.checkpointIfDue()
+        assertEquals(1, fixture.repository.checkpointAttempts)
+        assertEquals(5_000L, fixture.repository.session?.activeElapsedTime?.value)
+        assertTrue(fixture.repository.positions.isEmpty())
+    }
+
+    @Test
+    fun `VVM DUR 001 process loss at varied pre flush phases loses only uncommitted tail`() = runBlocking {
+        listOf(1L, 1_000L, 4_999L).forEach { tailMillis ->
+            val before = Fixture()
+            before.controller.start(ActivityType.CYCLING)
+            before.clock.advance(5_000L)
+            before.emitLocation(59.3293, 18.0686)
+            assertEquals(1, before.repository.positions.size)
+
+            before.clock.advance(tailMillis)
+            before.emitLocation(59.3294, 18.0687)
+            assertEquals(1, before.repository.positions.size)
+
+            val afterProcessLoss = RecordingController(
+                recordingRepository = before.repository,
+                locationSource = FakeLocationSource(),
+                stepSource = FakeStepSource(),
+                clockSource = before.clock,
+                persistencePolicy = RecordingPersistencePolicy(backoff = {}),
+            )
+            val recovered = afterProcessLoss.recoverAndResume()
+
+            assertEquals(before.activityId, recovered.activityId)
+            assertEquals(1L, before.repository.session?.positionSampleCount)
+            assertEquals(5_000L, before.repository.events.last().activeElapsedTime.value)
+        }
+    }
+
+    @Test
+    fun `VVM DUR 001 twenty accepted samples flush before five seconds`() = runBlocking {
+        val fixture = Fixture()
+        fixture.controller.start(ActivityType.CYCLING)
+
+        repeat(20) { index ->
+            fixture.clock.advance(100L)
+            fixture.emitLocation(0.0, index * 0.000001)
+        }
+
+        assertEquals(1, fixture.repository.checkpointAttempts)
+        assertEquals(20, fixture.repository.positions.size)
+        assertEquals(2_000L, fixture.repository.session?.activeElapsedTime?.value)
+    }
+
+    @Test
+    fun `VVM DUR 004 transient persistence failure retries and commits the batch once`() = runBlocking {
+        val fixture = Fixture()
+        fixture.controller.start(ActivityType.CYCLING)
+        fixture.repository.checkpointFailuresRemaining = 2
+        fixture.clock.advance(5_000L)
+
+        fixture.emitLocation(59.3293, 18.0686)
+
+        assertEquals(3, fixture.repository.checkpointAttempts)
+        assertEquals(1, fixture.repository.positions.size)
+        assertEquals(1L, fixture.repository.session?.positionSampleCount)
+    }
+
+    @Test
+    fun `VVM DUR 005 persistent failure stops after three retries and retains committed data`() = runBlocking {
+        var criticalFailure: RecordingPersistenceException? = null
+        val fixture = Fixture(
+            onCriticalPersistenceFailure = { criticalFailure = it },
+        )
+        fixture.controller.start(ActivityType.CYCLING)
+        fixture.repository.checkpointFailuresRemaining = 10
+        fixture.clock.advance(5_000L)
+
+        fixture.emitLocation(59.3293, 18.0686)
+
+        assertEquals(4, fixture.repository.checkpointAttempts)
+        assertEquals(4, criticalFailure?.attempts)
+        assertTrue(fixture.repository.positions.isEmpty())
+        assertNotNull(fixture.repository.session)
+    }
+
+    @Test
+    fun `VVM RECOV 001 and 002 recovery preserves identity time sources and discontinuities`() = runBlocking {
+        val before = Fixture()
+        before.controller.start(ActivityType.RUNNING)
+        before.clock.advance(4_999L)
+        before.emitLocation(59.3293, 18.0686)
+        before.emitSteps(28_451L)
+        before.clock.advance(1L)
+        before.controller.checkpointIfDue()
+        assertEquals(5_000L, before.repository.session?.activeElapsedTime?.value)
+
+        before.clock.advance(600_000L)
+        val recoveredLocation = FakeLocationSource()
+        val recoveredSteps = FakeStepSource()
+        val recoveredController = RecordingController(
+            recordingRepository = before.repository,
+            locationSource = recoveredLocation,
+            stepSource = recoveredSteps,
+            clockSource = before.clock,
+        )
+
+        val recovered = recoveredController.recoverAndResume()
+
+        assertEquals(before.activityId, recovered.activityId)
+        assertEquals(5_000L, recovered.activeElapsedTime.value)
+        assertEquals(1L, recovered.routeSegmentIndex?.value)
+        assertEquals(RecordingEventType.RECOVERY_RESUME, before.repository.events.last().type)
+        assertEquals(5_000L, before.repository.events.last().activeElapsedTime.value)
+
+        before.clock.advance(1_000L)
+        recoveredLocation.emit(before.locationMeasurement(59.3300, 18.0690))
+        recoveredSteps.emit(before.stepMeasurement(100L))
+        recoveredController.finish()
+
+        assertEquals(listOf(0L, 1L), before.repository.positions.map { it.routeSegmentIndex.value })
+        assertEquals(listOf(0L, 1L), before.repository.steps.map { it.counterEpoch.value })
+        assertEquals(6_000L, before.repository.session?.activeElapsedTime?.value)
+    }
+
+    private class Fixture(
+        onCriticalPersistenceFailure: suspend (RecordingPersistenceException) -> Unit = { throw it },
+    ) {
         val activityId = ActivityId.parse("40000000-0000-4000-8000-000000000003")
         val repository = FakeRecordingRepository()
         val location = FakeLocationSource()
@@ -319,6 +452,8 @@ class RecordingControllerTest {
             stepSource = steps,
             clockSource = clock,
             activityIdSource = ActivityIdSource { activityId },
+            persistencePolicy = RecordingPersistencePolicy(backoff = {}),
+            onCriticalPersistenceFailure = onCriticalPersistenceFailure,
         )
 
         suspend fun emitLocation(latitude: Double, longitude: Double) {

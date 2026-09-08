@@ -40,6 +40,10 @@ import com.jeppe.radm.domain.recording.RecordingState
 import com.jeppe.radm.platform.permissions.LocationPermissionCapability
 import com.jeppe.radm.platform.recording.RecordingServiceState
 import java.util.Locale
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 object RecordingTestTags {
     const val START = "recording_start"
@@ -57,6 +61,11 @@ object RecordingTestTags {
     const val DISCARD_CONFIRM = "recording_discard_confirm"
     const val TITLE = "recording_title"
     const val NOTES = "recording_notes"
+    const val RECOVERY = "recording_recovery"
+    const val RECOVERY_RESUME = "recording_recovery_resume"
+    const val RECOVERY_SAVE = "recording_recovery_save"
+    const val RECOVERY_DISCARD = "recording_recovery_discard"
+    const val RECOVERY_DISCARD_CONFIRM = "recording_recovery_discard_confirm"
 }
 
 @Composable
@@ -69,12 +78,18 @@ fun RecordingScreen(
     val message by viewModel.message.collectAsState()
     var selectedType by remember { mutableStateOf(ActivityType.RUNNING) }
     var pendingStart by remember { mutableStateOf<ActivityType?>(null) }
+    var pendingRecoveryResume by remember { mutableStateOf(false) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) {
         viewModel.refreshCapabilities()
-        pendingStart?.let(viewModel::start)
+        if (pendingRecoveryResume) {
+            viewModel.resumeRecovery()
+        } else {
+            pendingStart?.let(viewModel::start)
+        }
         pendingStart = null
+        pendingRecoveryResume = false
     }
 
     Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
@@ -87,6 +102,14 @@ fun RecordingScreen(
             verticalArrangement = Arrangement.Center,
         ) {
             when (val state = recordingState) {
+                RecordingServiceState.CheckingRecovery -> {
+                    Text(
+                        text = "Checking recording recovery…",
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.testTag(RecordingTestTags.STATE),
+                    )
+                }
+
                 RecordingServiceState.Idle,
                 is RecordingServiceState.CriticalError,
                 -> IdleRecordingContent(
@@ -115,6 +138,22 @@ fun RecordingScreen(
                     )
                 }
 
+                is RecordingServiceState.Recoverable -> RecoveryContent(
+                    state = state,
+                    error = message,
+                    onResume = {
+                        val permissions = viewModel.permissionsForStart(state.recording.activityType)
+                        if (permissions.isEmpty()) {
+                            viewModel.resumeRecovery()
+                        } else {
+                            pendingRecoveryResume = true
+                            permissionLauncher.launch(permissions)
+                        }
+                    },
+                    onFinishAndSave = viewModel::finishAndSaveRecovery,
+                    onDiscard = viewModel::discardRecovery,
+                )
+
                 is RecordingServiceState.Active -> if (
                     state.snapshot.state == RecordingState.FINALIZING
                 ) {
@@ -135,6 +174,89 @@ fun RecordingScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun RecoveryContent(
+    state: RecordingServiceState.Recoverable,
+    error: String?,
+    onResume: () -> Unit,
+    onFinishAndSave: () -> Unit,
+    onDiscard: () -> Unit,
+) {
+    val recovery = state.recording
+    var confirmDiscard by remember { mutableStateOf(false) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
+            .testTag(RecordingTestTags.RECOVERY),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("Interrupted activity", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            "A previous recording stopped and needs your decision. " +
+                "No activity is assumed during the interruption.",
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(20.dp))
+        Text(recovery.activityType.displayName(), style = MaterialTheme.typography.titleLarge)
+        Text(formatRecoveryDate(recovery.startedAtUtcMillis))
+        Text("Retained active time: ${formatElapsed(recovery.retainedActiveTime.value)}")
+        Text(
+            recovery.retainedDistance?.let { "Retained distance: ${formatDistance(it)}" }
+                ?: "Retained distance unavailable",
+        )
+        Text("${recovery.positionSampleCount} positions · ${recovery.stepSampleCount} step samples")
+        state.criticalMessage?.let {
+            Spacer(Modifier.height(12.dp))
+            Text(it, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
+        }
+        error?.let {
+            Spacer(Modifier.height(12.dp))
+            Text(it, color = MaterialTheme.colorScheme.error, textAlign = TextAlign.Center)
+        }
+        Spacer(Modifier.height(24.dp))
+        if (recovery.durableState != RecordingState.FINALIZING) {
+            Button(
+                onClick = onResume,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(RecordingTestTags.RECOVERY_RESUME),
+            ) { Text("Resume activity") }
+            Spacer(Modifier.height(10.dp))
+        }
+        OutlinedButton(
+            onClick = onFinishAndSave,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(RecordingTestTags.RECOVERY_SAVE),
+        ) { Text("Finish and save retained activity") }
+        TextButton(
+            onClick = { confirmDiscard = true },
+            modifier = Modifier.testTag(RecordingTestTags.RECOVERY_DISCARD),
+        ) { Text("Discard") }
+    }
+
+    if (confirmDiscard) {
+        AlertDialog(
+            onDismissRequest = { confirmDiscard = false },
+            title = { Text("Discard this interrupted recording?") },
+            text = { Text("This permanently removes the activity and all retained source data.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        confirmDiscard = false
+                        onDiscard()
+                    },
+                    modifier = Modifier.testTag(RecordingTestTags.RECOVERY_DISCARD_CONFIRM),
+                ) { Text("Discard permanently") }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDiscard = false }) { Text("Keep activity") }
+            },
+        )
     }
 }
 
@@ -375,6 +497,12 @@ private fun LocationAvailability.displayName(): String = when (this) {
 
 private fun formatDistance(distance: DistanceMetres): String =
     String.format(Locale.ROOT, "%.2f km", distance.value / 1_000.0)
+
+private fun formatRecoveryDate(timestampUtcMillis: Long): String =
+    DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)
+        .withLocale(Locale.getDefault())
+        .withZone(ZoneId.systemDefault())
+        .format(Instant.ofEpochMilli(timestampUtcMillis))
 
 private fun formatElapsed(milliseconds: Long): String {
     val totalSeconds = milliseconds / 1_000L

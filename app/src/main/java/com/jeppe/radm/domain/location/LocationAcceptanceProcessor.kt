@@ -84,13 +84,15 @@ sealed interface LocationAcceptanceResult {
 class LocationAcceptanceProcessor(
     acquisitionStartedAt: MonotonicTimeMillis,
     initialRouteSegmentIndex: RouteSegmentIndex,
+    initialCumulativeDistance: DistanceMetres = DistanceMetres.ZERO,
+    hasRetainedLocation: Boolean = false,
     private val config: LocationAcceptanceConfig = LocationAcceptanceConfig(),
 ) {
     private var segmentStartedAt = acquisitionStartedAt
     private var currentRouteSegmentIndex = initialRouteSegmentIndex
     private var lastAccepted: AcceptedLocationMeasurement? = null
-    private var cumulativeDistance = DistanceMetres.ZERO
-    private var hasAcceptedLocation = false
+    private var cumulativeDistance = initialCumulativeDistance
+    private var hasAcceptedLocation = hasRetainedLocation
     private var providerAvailable = true
     private var waitingForFix = true
     private var degraded = false

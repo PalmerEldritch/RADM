@@ -32,6 +32,7 @@ import com.jeppe.radm.domain.recording.RecordingStateMachine
 import com.jeppe.radm.domain.recording.RecordingTransition
 import com.jeppe.radm.domain.recording.StepMeasurement
 import com.jeppe.radm.domain.recording.StepSource
+import com.jeppe.radm.domain.processing.R00DistanceProcessor
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.util.UUID
@@ -75,6 +76,8 @@ class RecordingController(
     private val stepSource: StepSource,
     private val clockSource: ClockSource,
     private val activityIdSource: ActivityIdSource = RandomActivityIdSource,
+    private val persistencePolicy: RecordingPersistencePolicy = RecordingPersistencePolicy(),
+    private val onCriticalPersistenceFailure: suspend (RecordingPersistenceException) -> Unit = { throw it },
 ) {
     private val commandMutex = Mutex()
     private var runtime: RuntimeSession? = null
@@ -115,7 +118,9 @@ class RecordingController(
             activeElapsedTime = ActiveElapsedTimeMillis.ZERO,
         )
 
-        recordingRepository.createSession(activity, session, startEvent)
+        persistencePolicy.execute {
+            recordingRepository.createSession(activity, session, startEvent)
+        }
         runtime = RuntimeSession(
             activityType = activityType,
             session = session,
@@ -128,6 +133,76 @@ class RecordingController(
             lastFlushAtMonotonic = monotonicNow,
         )
         startApplicableSources(activityType)
+        snapshotLocked()
+    }
+
+    suspend fun recoverAndResume(): RecordingSnapshot = commandMutex.withLock {
+        check(runtime == null) { "A runtime recording already exists" }
+        val unresolved = checkNotNull(recordingRepository.loadUnresolvedRecording()) {
+            "No interrupted recording is available"
+        }
+        require(unresolved.session.state != RecordingState.FINALIZING) {
+            "A recording already awaiting final save cannot be resumed"
+        }
+        val occurredAt = clockSource.absoluteNow()
+        val monotonicNow = clockSource.monotonicNow()
+        val recoveredSession = unresolved.session.copy(
+            state = RecordingState.RECORDING,
+            stateEnteredAt = occurredAt,
+            lastCheckpointAt = occurredAt,
+            routeSegmentIndex = RouteSegmentIndex(
+                Math.addExact(unresolved.session.routeSegmentIndex.value, 1L),
+            ),
+        )
+        val recoveryEvent = RecordingEvent(
+            activityId = recoveredSession.activityId,
+            eventIndex = EventIndex(unresolved.nextEventIndex),
+            type = RecordingEventType.RECOVERY_RESUME,
+            occurredAt = occurredAt,
+            activeElapsedTime = recoveredSession.activeElapsedTime,
+        )
+        persistencePolicy.execute {
+            recordingRepository.persistTransition(recoveredSession, recoveryEvent)
+        }
+        val retainedDistance = unresolved.positions.takeIf { it.isNotEmpty() }
+            ?.let { R00DistanceProcessor().process(it).last().cumulativeDistance }
+            ?: DistanceMetres.ZERO
+        val nextStepEpoch = unresolved.steps.maxOfOrNull { it.counterEpoch.value }
+            ?.let { Math.addExact(it, 1L) }
+            ?: 0L
+        runtime = RuntimeSession(
+            activityType = unresolved.activity.type,
+            session = recoveredSession,
+            tracker = ActiveTimeTracker.recoverRecording(
+                checkpoint = recoveredSession.activeElapsedTime,
+                resumedAt = monotonicNow,
+            ),
+            locationProcessor = LocationAcceptanceProcessor(
+                acquisitionStartedAt = monotonicNow,
+                initialRouteSegmentIndex = recoveredSession.routeSegmentIndex,
+                initialCumulativeDistance = retainedDistance,
+                hasRetainedLocation = unresolved.positions.isNotEmpty(),
+            ),
+            nextEventIndex = Math.addExact(unresolved.nextEventIndex, 1L),
+            lastFlushAtMonotonic = monotonicNow,
+            nextPositionIndex = recoveredSession.positionSampleCount,
+            nextStepIndex = recoveredSession.stepSampleCount,
+            stepEpochOffset = nextStepEpoch,
+        )
+        startApplicableSources(unresolved.activity.type)
+        snapshotLocked()
+    }
+
+    suspend fun checkpointIfDue(): RecordingSnapshot = commandMutex.withLock {
+        val current = runtime ?: return@withLock snapshotLocked()
+        if (current.session.state == RecordingState.RECORDING) {
+            flushIfRequired(current, clockSource.monotonicNow())
+        }
+        snapshotLocked()
+    }
+
+    suspend fun stopAfterCriticalPersistenceFailure(): RecordingSnapshot = commandMutex.withLock {
+        runtime?.let { stopApplicableSources(it.activityType) }
         snapshotLocked()
     }
 
@@ -151,12 +226,14 @@ class RecordingController(
         val event = current.event(RecordingEventType.PAUSE, occurredAt, pausedSession.activeElapsedTime)
 
         try {
-            recordingRepository.persistTransition(
-                session = pausedSession,
-                event = event,
-                positions = current.pendingPositions,
-                steps = current.pendingSteps,
-            )
+            persistencePolicy.execute {
+                recordingRepository.persistTransition(
+                    session = pausedSession,
+                    event = event,
+                    positions = current.pendingPositions,
+                    steps = current.pendingSteps,
+                )
+            }
         } catch (failure: Throwable) {
             startApplicableSources(current.activityType)
             throw failure
@@ -183,7 +260,7 @@ class RecordingController(
             resumedSession.activeElapsedTime,
         )
 
-        recordingRepository.persistTransition(resumedSession, event)
+        persistencePolicy.execute { recordingRepository.persistTransition(resumedSession, event) }
         current.commitTransition(resumedSession, current.tracker.resume(monotonicNow))
         current.locationProcessor.beginNewSegment(resumedSession.routeSegmentIndex, monotonicNow)
         current.frozenLocationSnapshot = null
@@ -216,12 +293,14 @@ class RecordingController(
         )
 
         try {
-            recordingRepository.persistTransition(
-                session = finalizingSession,
-                event = event,
-                positions = current.pendingPositions,
-                steps = current.pendingSteps,
-            )
+            persistencePolicy.execute {
+                recordingRepository.persistTransition(
+                    session = finalizingSession,
+                    event = event,
+                    positions = current.pendingPositions,
+                    steps = current.pendingSteps,
+                )
+            }
         } catch (failure: Throwable) {
             startApplicableSources(current.activityType)
             throw failure
@@ -248,7 +327,7 @@ class RecordingController(
                 updatedAt = savedAt,
             )
 
-            val saved = recordingRepository.finalizeSession(finalization)
+            val saved = persistencePolicy.execute { recordingRepository.finalizeSession(finalization) }
             runtime = null
             saved
         }
@@ -256,7 +335,7 @@ class RecordingController(
     suspend fun discard(): Boolean = commandMutex.withLock {
         val current = requireRuntime(RecordingCommand.DISCARD)
         requireTransition(RecordingCommand.DISCARD, current.session.state)
-        val discarded = recordingRepository.discardSession()
+        val discarded = persistencePolicy.execute { recordingRepository.discardSession() }
         check(discarded) { "No durable unresolved recording exists to discard" }
         runtime = null
         true
@@ -264,66 +343,81 @@ class RecordingController(
 
     suspend fun snapshot(): RecordingSnapshot = commandMutex.withLock { snapshotLocked() }
 
-    private suspend fun acceptLocation(event: LocationSourceEvent) = commandMutex.withLock {
-        val current = runtime ?: return@withLock
-        if (current.session.state != RecordingState.RECORDING) return@withLock
-        when (event) {
-            LocationSourceEvent.ProviderAvailable -> {
-                current.locationProcessor.providerAvailable(clockSource.monotonicNow())
-                return@withLock
-            }
+    private suspend fun acceptLocation(event: LocationSourceEvent) {
+        try {
+            commandMutex.withLock {
+                val current = runtime ?: return@withLock
+                if (current.session.state != RecordingState.RECORDING) return@withLock
+                when (event) {
+                    LocationSourceEvent.ProviderAvailable -> {
+                        current.locationProcessor.providerAvailable(clockSource.monotonicNow())
+                        return@withLock
+                    }
 
-            LocationSourceEvent.ProviderUnavailable -> {
-                current.locationProcessor.providerUnavailable()
-                return@withLock
-            }
+                    LocationSourceEvent.ProviderUnavailable -> {
+                        current.locationProcessor.providerUnavailable()
+                        return@withLock
+                    }
 
-            is LocationSourceEvent.Candidate -> Unit
+                    is LocationSourceEvent.Candidate -> Unit
+                }
+                val accepted = when (
+                    val result = current.locationProcessor.accept(
+                        candidate = event.value,
+                        evaluatedAt = clockSource.monotonicNow(),
+                    )
+                ) {
+                    is LocationAcceptanceResult.Accepted -> result.measurement
+                    is LocationAcceptanceResult.Rejected -> return@withLock
+                }
+                val elapsed = current.tracker.elapsedAtOrNull(accepted.monotonicTimestamp) ?: return@withLock
+                if (accepted.routeSegmentIndex != current.session.routeSegmentIndex) {
+                    current.session = current.session.copy(routeSegmentIndex = accepted.routeSegmentIndex)
+                }
+                current.pendingPositions += PositionSample(
+                    activityId = current.session.activityId,
+                    sampleIndex = SampleIndex(current.nextPositionIndex++),
+                    routeSegmentIndex = accepted.routeSegmentIndex,
+                    timestamp = accepted.timestamp,
+                    activeElapsedTime = elapsed,
+                    latitude = accepted.latitude,
+                    longitude = accepted.longitude,
+                    elevation = accepted.elevation,
+                    horizontalAccuracy = accepted.horizontalAccuracy,
+                    verticalAccuracy = accepted.verticalAccuracy,
+                )
+                flushIfRequired(current, accepted.monotonicTimestamp)
+            }
+        } catch (failure: RecordingPersistenceException) {
+            onCriticalPersistenceFailure(failure)
         }
-        val accepted = when (
-            val result = current.locationProcessor.accept(
-                candidate = event.value,
-                evaluatedAt = clockSource.monotonicNow(),
-            )
-        ) {
-            is LocationAcceptanceResult.Accepted -> result.measurement
-            is LocationAcceptanceResult.Rejected -> return@withLock
-        }
-        val elapsed = current.tracker.elapsedAtOrNull(accepted.monotonicTimestamp) ?: return@withLock
-        if (accepted.routeSegmentIndex != current.session.routeSegmentIndex) {
-            current.session = current.session.copy(routeSegmentIndex = accepted.routeSegmentIndex)
-        }
-        current.pendingPositions += PositionSample(
-            activityId = current.session.activityId,
-            sampleIndex = SampleIndex(current.nextPositionIndex++),
-            routeSegmentIndex = accepted.routeSegmentIndex,
-            timestamp = accepted.timestamp,
-            activeElapsedTime = elapsed,
-            latitude = accepted.latitude,
-            longitude = accepted.longitude,
-            elevation = accepted.elevation,
-            horizontalAccuracy = accepted.horizontalAccuracy,
-            verticalAccuracy = accepted.verticalAccuracy,
-        )
-        flushIfRequired(current, accepted.monotonicTimestamp)
     }
 
-    private suspend fun acceptStep(measurement: StepMeasurement) = commandMutex.withLock {
-        val current = runtime ?: return@withLock
-        if (current.session.state != RecordingState.RECORDING || current.activityType != ActivityType.RUNNING) {
-            return@withLock
+    private suspend fun acceptStep(measurement: StepMeasurement) {
+        try {
+            commandMutex.withLock {
+                val current = runtime ?: return@withLock
+                if (current.session.state != RecordingState.RECORDING || current.activityType != ActivityType.RUNNING) {
+                    return@withLock
+                }
+                val elapsed = current.tracker.elapsedAtOrNull(measurement.monotonicTimestamp) ?: return@withLock
+                current.pendingSteps += StepSample(
+                    activityId = current.session.activityId,
+                    sampleIndex = SampleIndex(current.nextStepIndex++),
+                    counterEpoch = measurement.counterEpoch.offsetBy(current.stepEpochOffset),
+                    timestamp = measurement.timestamp,
+                    activeElapsedTime = elapsed,
+                    cumulativeSteps = measurement.cumulativeSteps,
+                )
+                flushIfRequired(current, measurement.monotonicTimestamp)
+            }
+        } catch (failure: RecordingPersistenceException) {
+            onCriticalPersistenceFailure(failure)
         }
-        val elapsed = current.tracker.elapsedAtOrNull(measurement.monotonicTimestamp) ?: return@withLock
-        current.pendingSteps += StepSample(
-            activityId = current.session.activityId,
-            sampleIndex = SampleIndex(current.nextStepIndex++),
-            counterEpoch = measurement.counterEpoch,
-            timestamp = measurement.timestamp,
-            activeElapsedTime = elapsed,
-            cumulativeSteps = measurement.cumulativeSteps,
-        )
-        flushIfRequired(current, measurement.monotonicTimestamp)
     }
+
+    private fun com.jeppe.radm.domain.model.StepCounterEpoch.offsetBy(offset: Long) =
+        com.jeppe.radm.domain.model.StepCounterEpoch(Math.addExact(value, offset))
 
     private suspend fun flushIfRequired(current: RuntimeSession, now: MonotonicTimeMillis) {
         val intervalMillis = Math.subtractExact(now.value, current.lastFlushAtMonotonic.value)
@@ -338,11 +432,13 @@ class RecordingController(
             positionSampleCount = current.nextPositionIndex,
             stepSampleCount = current.nextStepIndex,
         )
-        recordingRepository.persistCheckpoint(
-            checkpoint,
-            current.pendingPositions,
-            current.pendingSteps,
-        )
+        persistencePolicy.execute {
+            recordingRepository.persistCheckpoint(
+                checkpoint,
+                current.pendingPositions,
+                current.pendingSteps,
+            )
+        }
         current.commitCheckpoint(checkpoint, now)
     }
 
@@ -414,6 +510,7 @@ class RecordingController(
         val pendingSteps: MutableList<StepSample> = mutableListOf(),
         var finishedAt: AbsoluteTimestampUtcMillis? = null,
         var frozenLocationSnapshot: LiveLocationSnapshot? = null,
+        val stepEpochOffset: Long = 0L,
     ) {
         fun event(
             type: RecordingEventType,

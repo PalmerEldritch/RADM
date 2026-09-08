@@ -1,5 +1,6 @@
 package com.jeppe.radm.data.repository
 
+import androidx.room3.withReadTransaction
 import androidx.room3.withWriteTransaction
 import com.jeppe.radm.data.db.RadmDatabase
 import com.jeppe.radm.data.db.toDomain
@@ -46,6 +47,20 @@ class RoomRecordingRepository(
     }
 
     override suspend fun loadActiveSession() = recordingDao.getSession()?.toDomain()
+
+    override suspend fun loadUnresolvedRecording(): UnresolvedRecording? = database.withReadTransaction {
+        val session = recordingDao.getSession()?.toDomain() ?: return@withReadTransaction null
+        val activity = checkNotNull(activityDao.getActivity(session.activityId.value)) {
+            "Unresolved recording activity is missing"
+        }.toDomain()
+        UnresolvedRecording(
+            activity = activity,
+            session = session,
+            events = recordingDao.getEvents(session.activityId.value).map { it.toDomain() },
+            positions = recordingDao.getPositions(session.activityId.value).map { it.toDomain() },
+            steps = recordingDao.getSteps(session.activityId.value).map { it.toDomain() },
+        )
+    }
 
     override suspend fun appendEvents(events: List<RecordingEvent>) {
         appendOrdered(
@@ -222,17 +237,25 @@ class RoomRecordingRepository(
             RecordingEventType.RESUME -> RecordingCommand.RESUME
             RecordingEventType.FINISH -> RecordingCommand.FINISH
             RecordingEventType.START -> error("START is only valid in createSession")
-            RecordingEventType.RECOVERY_RESUME -> error("Recovery resume belongs to M9")
+            RecordingEventType.RECOVERY_RESUME -> null
         }
-        val transition = RecordingStateMachine.transition(current.state, command)
-        require(transition is RecordingTransition.Accepted && transition.state == updated.state) {
-            "Invalid durable transition ${current.state} -> ${updated.state} for ${event.type}"
+        if (event.type == RecordingEventType.RECOVERY_RESUME) {
+            require(current.state != RecordingState.FINALIZING && updated.state == RecordingState.RECORDING) {
+                "Recovery resume requires an interrupted RECORDING or PAUSED session"
+            }
+        } else {
+            val transition = RecordingStateMachine.transition(current.state, checkNotNull(command))
+            require(transition is RecordingTransition.Accepted && transition.state == updated.state) {
+                "Invalid durable transition ${current.state} -> ${updated.state} for ${event.type}"
+            }
         }
         require(event.activeElapsedTime == updated.activeElapsedTime) {
             "Transition event and session must share an active-time boundary"
         }
         val expectedSegment = when (event.type) {
-            RecordingEventType.RESUME -> current.routeSegmentIndex.value + 1L
+            RecordingEventType.RESUME,
+            RecordingEventType.RECOVERY_RESUME,
+            -> current.routeSegmentIndex.value + 1L
             else -> current.routeSegmentIndex.value
         }
         require(updated.routeSegmentIndex.value == expectedSegment) {

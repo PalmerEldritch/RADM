@@ -275,11 +275,11 @@ Verification matrix         Baseline
 Implementation plan         Baseline
 Architecture ADRs 001–009   Accepted
 
-Implementation              M8 complete; M9 is next and not started
-Last local gate             ./gradlew check assembleDebug — PASS (2026-09-07)
-Applicable M8 VVM           LIB-001..004, REC-008/009, PERF-006 — PASS
-JVM tests                   66 tests — PASS
-Connected Android tests     37 tests — PASS (3 hardware-only skips; Pixel_10 AVD, Android 17 / API 37, 2026-09-07)
+Implementation              M9 automated scope implemented; assisted reboot closure pending
+Last local gate             ./gradlew check assembleDebug — PASS (2026-09-08)
+Applicable M9 VVM           RECOV-001..004, DUR-001..005, REL-005 — PASS; RECOV-005/006 — BLOCKED
+JVM tests                   77 tests — PASS
+Android instrumentation     42 tests — PASS (2 opt-in human/device skips; Galaxy S24, Android 16 / API 36, 2026-09-08)
 M5 physical smoke           PASS (Galaxy S24 SM-S921B/DS)
 M6 physical step source     PASS (18 retained events; 17 within-epoch steps)
 ```
@@ -318,7 +318,13 @@ header and support protected editing/deletion. Type changes invalidate and
 recalculate derived applicability without touching source streams, and stale
 summary rows are never presented as current.
 
-M8 is complete. M9 — Durability and Recovery — is next and has not started.
+M9 now provides periodic and sample-count durability checkpoints, bounded write
+retry with critical recovery handling, startup reconstruction of unresolved Room
+sessions, recovery Resume/Finish/Save/protected Discard, identity-preserving route
+and Running step discontinuities, and explicit recovery UI. Automated and
+stationary S24 process-interruption coverage passes. Mandatory assisted reboot
+recovery (`VVM-RECOV-005/006`) remains blocked, so M9 is not yet complete. See
+[`verification/reports/2026-09-08_s24_VVM-M9-automated.md`](verification/reports/2026-09-08_s24_VVM-M9-automated.md).
 
 The Android application-backup policy remains intentionally open and must be resolved before R00 release.
 

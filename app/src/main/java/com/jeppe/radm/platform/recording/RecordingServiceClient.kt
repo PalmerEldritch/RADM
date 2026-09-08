@@ -42,6 +42,33 @@ class RecordingServiceClient(
         }
     }
 
+    fun resumeRecovery(): Result<Unit> {
+        val recoverable = stateStore.state.value as? RecordingServiceState.Recoverable
+            ?: return Result.failure(IllegalStateException("No interrupted recording is available"))
+        if (recoverable.recording.durableState == com.jeppe.radm.domain.recording.RecordingState.FINALIZING) {
+            return Result.failure(IllegalStateException("This activity is already awaiting final save"))
+        }
+        if (!capabilityChecker.current().canStartLocationForegroundService) {
+            return Result.failure(
+                IllegalStateException(
+                    applicationContext.getString(R.string.recording_service_location_capability_required),
+                ),
+            )
+        }
+        stateStore.publish(RecordingServiceState.Starting(recoverable.recording.activityType))
+        return runCatching {
+            applicationContext.startForegroundService(
+                RecordingForegroundService.intent(applicationContext, RecordingServiceAction.RECOVER)
+                    .putExtra(
+                        RecordingForegroundService.EXTRA_ACTIVITY_TYPE,
+                        recoverable.recording.activityType.name,
+                    ),
+            )
+        }.map { Unit }.onFailure {
+            stateStore.publish(recoverable)
+        }
+    }
+
     fun pause(): Result<Unit> = send(RecordingServiceAction.PAUSE)
 
     fun resume(): Result<Unit> = send(RecordingServiceAction.RESUME)
@@ -73,6 +100,7 @@ class RecordingServiceClient(
 
 enum class RecordingServiceAction(val intentAction: String) {
     START("com.jeppe.radm.recording.START"),
+    RECOVER("com.jeppe.radm.recording.RECOVER"),
     PAUSE("com.jeppe.radm.recording.PAUSE"),
     RESUME("com.jeppe.radm.recording.RESUME"),
     FINISH("com.jeppe.radm.recording.FINISH"),

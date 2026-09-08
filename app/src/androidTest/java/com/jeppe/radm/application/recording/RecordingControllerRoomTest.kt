@@ -179,6 +179,49 @@ class RecordingControllerRoomTest {
         assertEquals(21_000L, RoomRecordingRepository(database).loadActiveSession()?.activeElapsedTime?.value)
     }
 
+    @Test
+    fun vvmRecov001And002_databaseReopenResumesSameIdentityAtNewBoundaries() = runBlocking {
+        val before = Fixture(database)
+        before.controller.start(ActivityType.RUNNING)
+        before.clock.advance(4_999L)
+        before.location.emit(before.locationMeasurement(59.3293, 18.0686))
+        before.steps.emit(before.stepMeasurement(28_451L))
+        before.clock.advance(1L)
+        before.controller.checkpointIfDue()
+
+        database.close()
+        before.clock.advance(600_000L)
+        database = RadmDatabaseFactory.create(context, DATABASE_NAME)
+        val recoveredLocation = FakeLocationSource()
+        val recoveredSteps = FakeStepSource()
+        val recoveredController = RecordingController(
+            recordingRepository = RoomRecordingRepository(database),
+            locationSource = recoveredLocation,
+            stepSource = recoveredSteps,
+            clockSource = before.clock,
+        )
+
+        val recovered = recoveredController.recoverAndResume()
+        val activities = RoomActivityRepository(database)
+
+        assertEquals(ACTIVITY_ID, recovered.activityId)
+        assertEquals(5_000L, recovered.activeElapsedTime.value)
+        assertEquals(1L, recovered.routeSegmentIndex?.value)
+        assertEquals(
+            listOf(RecordingEventType.START, RecordingEventType.RECOVERY_RESUME),
+            activities.getRecordingEvents(ACTIVITY_ID).map { it.type },
+        )
+
+        before.clock.advance(1_000L)
+        recoveredLocation.emit(before.locationMeasurement(59.3300, 18.0690))
+        recoveredSteps.emit(before.stepMeasurement(100L))
+        recoveredController.finish()
+
+        assertEquals(listOf(0L, 1L), activities.getPositions(ACTIVITY_ID).map { it.routeSegmentIndex.value })
+        assertEquals(listOf(0L, 1L), activities.getSteps(ACTIVITY_ID).map { it.counterEpoch.value })
+        assertEquals(6_000L, RoomRecordingRepository(database).loadActiveSession()?.activeElapsedTime?.value)
+    }
+
     private class Fixture(database: RadmDatabase) {
         val clock = FakeClockSource(
             absoluteTime = AbsoluteTimestampUtcMillis(BASE_UTC),

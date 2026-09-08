@@ -15,6 +15,7 @@ import com.jeppe.radm.RadmApplication
 import com.jeppe.radm.application.recording.RecordingController
 import com.jeppe.radm.application.recording.RecordingSnapshot
 import com.jeppe.radm.application.recording.SaveRecordingMetadata
+import com.jeppe.radm.application.recording.RecordingPersistenceException
 import com.jeppe.radm.domain.model.ActivityType
 import com.jeppe.radm.domain.recording.RecordingState
 import com.jeppe.radm.platform.location.AndroidLocationSource
@@ -26,6 +27,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicBoolean
 
 class RecordingForegroundService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -36,6 +38,7 @@ class RecordingForegroundService : Service() {
     private var acceptedStartCommand = false
     private var resolvedNormally = false
     private var lastSnapshot: RecordingSnapshot? = null
+    private val handlingCriticalPersistenceFailure = AtomicBoolean(false)
 
     override fun onCreate() {
         super.onCreate()
@@ -46,6 +49,7 @@ class RecordingForegroundService : Service() {
             locationSource = AndroidLocationSource(this, serviceScope),
             stepSource = AndroidStepSource(this, serviceScope),
             clockSource = AndroidClockSource,
+            onCriticalPersistenceFailure = ::handleCriticalPersistenceFailure,
         )
         notificationManager = getSystemService(NotificationManager::class.java)
         createNotificationChannel()
@@ -57,6 +61,7 @@ class RecordingForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (val action = RecordingServiceAction.from(intent)) {
             RecordingServiceAction.START -> acceptStart(checkNotNull(intent))
+            RecordingServiceAction.RECOVER -> acceptRecovery(checkNotNull(intent))
             RecordingServiceAction.PAUSE,
             RecordingServiceAction.RESUME,
             RecordingServiceAction.FINISH,
@@ -71,7 +76,9 @@ class RecordingForegroundService : Service() {
             )
 
             null -> {
-                publishCriticalError(getString(R.string.recording_service_restart_requires_recovery))
+                (application as RadmApplication).container.refreshRecoveryState(
+                    getString(R.string.recording_service_restart_requires_recovery),
+                )
                 stopSelf(startId)
             }
         }
@@ -84,9 +91,32 @@ class RecordingForegroundService : Service() {
         commands.close()
         serviceScope.cancel()
         if (!resolvedNormally && acceptedStartCommand) {
-            publishCriticalError(getString(R.string.recording_service_stopped_unexpectedly))
+            (application as RadmApplication).container.refreshRecoveryState(
+                getString(R.string.recording_service_stopped_unexpectedly),
+            )
         }
         super.onDestroy()
+    }
+
+    private fun acceptRecovery(intent: Intent) {
+        if (acceptedStartCommand) return
+        acceptedStartCommand = true
+        val activityType = intent.getStringExtra(EXTRA_ACTIVITY_TYPE)
+            ?.let { runCatching { ActivityType.valueOf(it) }.getOrNull() }
+        if (activityType == null) {
+            failServiceStart(getString(R.string.recording_service_invalid_start))
+            return
+        }
+        val capabilities = (application as RadmApplication).container.recordingCapabilityChecker.current()
+        if (!capabilities.canStartLocationForegroundService) {
+            (application as RadmApplication).container.refreshRecoveryState(
+                getString(R.string.recording_service_location_capability_required),
+            )
+            stopSelf()
+            return
+        }
+        if (!promoteToForeground(activityType)) return
+        commands.trySend(ServiceCommand.Recover)
     }
 
     private fun acceptStart(intent: Intent) {
@@ -137,6 +167,11 @@ class RecordingForegroundService : Service() {
                     launchElapsedTicker()
                 }
 
+                ServiceCommand.Recover -> {
+                    publish(controller.recoverAndResume())
+                    launchElapsedTicker()
+                }
+
                 is ServiceCommand.Save -> {
                     val saved = controller.save(command.metadata)
                     runCatching {
@@ -160,14 +195,23 @@ class RecordingForegroundService : Service() {
                     }
 
                     RecordingServiceAction.START -> Unit
+                    RecordingServiceAction.RECOVER -> Unit
                 }
             }
         } catch (failure: Throwable) {
+            if (failure is RecordingPersistenceException) {
+                handleCriticalPersistenceFailure(failure)
+                return
+            }
             publishCriticalError(
                 failure.message ?: getString(R.string.recording_command_failed),
             )
-            if (command is ServiceCommand.Start) {
+            if (command is ServiceCommand.Start || command is ServiceCommand.Recover) {
                 stopForeground(STOP_FOREGROUND_REMOVE)
+                if (command is ServiceCommand.Recover) {
+                    resolvedNormally = true
+                    (application as RadmApplication).container.refreshRecoveryState(failure.message)
+                }
                 stopSelf()
             }
         }
@@ -177,11 +221,29 @@ class RecordingForegroundService : Service() {
         serviceScope.launch {
             while (true) {
                 delay(ELAPSED_UPDATE_INTERVAL_MS)
-                val snapshot = runCatching { controller.snapshot() }.getOrNull() ?: return@launch
+                val snapshot = try {
+                    controller.checkpointIfDue()
+                } catch (failure: RecordingPersistenceException) {
+                    handleCriticalPersistenceFailure(failure)
+                    return@launch
+                } catch (_: Throwable) {
+                    return@launch
+                }
                 if (snapshot.state == RecordingState.IDLE) return@launch
                 publish(snapshot, updateNotification = false)
             }
         }
+    }
+
+    private suspend fun handleCriticalPersistenceFailure(failure: RecordingPersistenceException) {
+        if (!handlingCriticalPersistenceFailure.compareAndSet(false, true)) return
+        controller.stopAfterCriticalPersistenceFailure()
+        resolvedNormally = true
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        (application as RadmApplication).container.refreshRecoveryState(
+            failure.message ?: getString(R.string.recording_command_failed),
+        )
+        stopSelf()
     }
 
     private fun publish(snapshot: RecordingSnapshot, updateNotification: Boolean = true) {
@@ -269,6 +331,7 @@ class RecordingForegroundService : Service() {
 
     private sealed interface ServiceCommand {
         data class Start(val activityType: ActivityType) : ServiceCommand
+        data object Recover : ServiceCommand
         data class Save(val metadata: SaveRecordingMetadata) : ServiceCommand
         data class Action(val action: RecordingServiceAction) : ServiceCommand
     }

@@ -47,10 +47,15 @@ private fun RadmApp(
     var recordingFlowRequested by rememberSaveable { mutableStateOf(false) }
     var observedRecording by rememberSaveable { mutableStateOf(false) }
     val serviceOwnsVisibleFlow = serviceState is RecordingServiceState.Starting ||
-        serviceState is RecordingServiceState.Active
+        serviceState is RecordingServiceState.Active ||
+        serviceState is RecordingServiceState.Recoverable ||
+        serviceState is RecordingServiceState.CheckingRecovery
 
     LaunchedEffect(serviceState) {
-        if (serviceOwnsVisibleFlow) {
+        if (serviceState is RecordingServiceState.Starting ||
+            serviceState is RecordingServiceState.Active ||
+            serviceState is RecordingServiceState.Recoverable
+        ) {
             observedRecording = true
         } else if (serviceState is RecordingServiceState.Idle && observedRecording) {
             observedRecording = false

@@ -10,6 +10,17 @@ import com.jeppe.radm.domain.model.RecordingEvent
 import com.jeppe.radm.domain.model.StepSample
 import com.jeppe.radm.domain.recording.RecordingSession
 
+data class UnresolvedRecording(
+    val activity: Activity,
+    val session: RecordingSession,
+    val events: List<RecordingEvent>,
+    val positions: List<PositionSample>,
+    val steps: List<StepSample>,
+) {
+    val nextEventIndex: Long
+        get() = (events.lastOrNull()?.eventIndex?.value ?: -1L) + 1L
+}
+
 data class RecordingFinalization(
     val activityId: ActivityId,
     val activityType: ActivityType,
@@ -29,6 +40,7 @@ interface RecordingRepository {
     )
 
     suspend fun loadActiveSession(): RecordingSession?
+    suspend fun loadUnresolvedRecording(): UnresolvedRecording?
     suspend fun appendEvents(events: List<RecordingEvent>)
     suspend fun appendPositions(samples: List<PositionSample>)
     suspend fun appendSteps(samples: List<StepSample>)

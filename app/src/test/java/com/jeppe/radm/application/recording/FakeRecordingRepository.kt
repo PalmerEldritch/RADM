@@ -2,6 +2,7 @@ package com.jeppe.radm.application.recording
 
 import com.jeppe.radm.data.repository.RecordingFinalization
 import com.jeppe.radm.data.repository.RecordingRepository
+import com.jeppe.radm.data.repository.UnresolvedRecording
 import com.jeppe.radm.domain.model.Activity
 import com.jeppe.radm.domain.model.PositionSample
 import com.jeppe.radm.domain.model.RecordingEvent
@@ -16,6 +17,10 @@ class FakeRecordingRepository : RecordingRepository {
     val steps = mutableListOf<StepSample>()
     val operations = mutableListOf<String>()
     var failFinalization = false
+    var checkpointFailuresRemaining = 0
+    var transitionFailuresRemaining = 0
+    var checkpointAttempts = 0
+    var transitionAttempts = 0
 
     override suspend fun createSession(
         activity: Activity,
@@ -30,6 +35,17 @@ class FakeRecordingRepository : RecordingRepository {
     }
 
     override suspend fun loadActiveSession(): RecordingSession? = session
+
+    override suspend fun loadUnresolvedRecording(): UnresolvedRecording? {
+        val currentSession = session ?: return null
+        return UnresolvedRecording(
+            activity = checkNotNull(activity),
+            session = currentSession,
+            events = events.toList(),
+            positions = positions.toList(),
+            steps = steps.toList(),
+        )
+    }
 
     override suspend fun appendEvents(events: List<RecordingEvent>) {
         this.events += events
@@ -48,6 +64,8 @@ class FakeRecordingRepository : RecordingRepository {
         positions: List<PositionSample>,
         steps: List<StepSample>,
     ) {
+        checkpointAttempts += 1
+        if (checkpointFailuresRemaining-- > 0) error("Injected checkpoint failure")
         this.positions += positions
         this.steps += steps
         this.session = session
@@ -60,6 +78,8 @@ class FakeRecordingRepository : RecordingRepository {
         positions: List<PositionSample>,
         steps: List<StepSample>,
     ) {
+        transitionAttempts += 1
+        if (transitionFailuresRemaining-- > 0) error("Injected transition failure")
         this.positions += positions
         this.steps += steps
         events += event
