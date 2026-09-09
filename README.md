@@ -275,13 +275,14 @@ Verification matrix         Baseline
 Implementation plan         Baseline
 Architecture ADRs 001–009   Accepted
 
-Implementation              M9 automated scope implemented; assisted reboot closure pending
-Last local gate             ./gradlew check assembleDebug — PASS (2026-09-08)
-Applicable M9 VVM           RECOV-001..004, DUR-001..005, REL-005 — PASS; RECOV-005/006 — BLOCKED
+Implementation              M9 complete; M10 not started
+Last local gate             ./gradlew check assembleDebug — PASS (2026-09-09)
+Applicable M9 VVM           RECOV-001..006, DUR-001..005, REL-005 — PASS
 JVM tests                   77 tests — PASS
 Android instrumentation     42 tests — PASS (2 opt-in human/device skips; Galaxy S24, Android 16 / API 36, 2026-09-08)
 M5 physical smoke           PASS (Galaxy S24 SM-S921B/DS)
 M6 physical step source     PASS (18 retained events; 17 within-epoch steps)
+M9 physical reboot          RECOV-005/006 — PASS (Galaxy S24 SM-S921B/DS, 2026-09-09)
 ```
 
 M5 adds the phone-native GPS adapter, a deterministic source-neutral acceptance
@@ -318,13 +319,15 @@ header and support protected editing/deletion. Type changes invalidate and
 recalculate derived applicability without touching source streams, and stale
 summary rows are never presented as current.
 
-M9 now provides periodic and sample-count durability checkpoints, bounded write
+M9 provides periodic and sample-count durability checkpoints, bounded write
 retry with critical recovery handling, startup reconstruction of unresolved Room
 sessions, recovery Resume/Finish/Save/protected Discard, identity-preserving route
-and Running step discontinuities, and explicit recovery UI. Automated and
-stationary S24 process-interruption coverage passes. Mandatory assisted reboot
-recovery (`VVM-RECOV-005/006`) remains blocked, so M9 is not yet complete. See
-[`verification/reports/2026-09-08_s24_VVM-M9-automated.md`](verification/reports/2026-09-08_s24_VVM-M9-automated.md).
+and Running step discontinuities, and explicit recovery UI. Automated/stationary
+process-interruption coverage and mandatory reference-device reboot recovery
+(`VVM-RECOV-005/006`) pass. See
+[`verification/reports/2026-09-08_s24_VVM-M9-automated.md`](verification/reports/2026-09-08_s24_VVM-M9-automated.md)
+and
+[`verification/reports/2026-09-09_s24_VVM-M9-reboot.md`](verification/reports/2026-09-09_s24_VVM-M9-reboot.md).
 
 The Android application-backup policy remains intentionally open and must be resolved before R00 release.
 

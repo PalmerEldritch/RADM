@@ -2,9 +2,9 @@
 
 ## Current State
 
-Current milestone: **M9 — Durability and Recovery (automated scope PASS; assisted reboot closure BLOCKED)**
+Current milestone: **M10 — Static Activity Analysis (not started)**
 
-Last completed milestone: **M8 — Activity Finalization and Library**
+Last completed milestone: **M9 — Durability and Recovery**
 
 ---
 
@@ -21,7 +21,7 @@ Last completed milestone: **M8 — Activity Finalization and Library**
 | M6 — Running step acquisition | PASS | 2026-09-07 |
 | M7 — Final processors and summaries | PASS | 2026-09-07 |
 | M8 — Activity finalization and library | PASS | 2026-09-07 |
-| M9 — Durability and recovery | IN_PROGRESS | Automated/stationary scope PASS 2026-09-08; reboot closure BLOCKED |
+| M9 — Durability and recovery | PASS | 2026-09-09 |
 | M10 — Static Activity Analysis | NOT_STARTED | — |
 | M11 — Synchronized graph analysis | NOT_STARTED | — |
 | M12 — Map integration and full synchronization | NOT_STARTED | — |
@@ -476,7 +476,7 @@ Deferred verification:
 
 ## M9 Implementation Record
 
-Status: **IN_PROGRESS — automated/stationary scope PASS; assisted reboot closure BLOCKED**
+Status: **PASS**
 
 Implemented:
 
@@ -509,9 +509,13 @@ Verification:
   human/device cases);
 - stationary production UI → foreground service → durable checkpoints → ADB
   force-stop → cold launch → recovery UI → Resume retained the same UUID;
+- reference-device Running recording → real GNSS and step source data → reboot →
+  manual unlock/cold launch → recovery UI → Resume retained the same UUID,
+  excluded reboot downtime, and began new route/step discontinuities;
 - `git diff --check` — PASS;
-- evidence —
-  `verification/reports/2026-09-08_s24_VVM-M9-automated.md`.
+- evidence:
+  - `verification/reports/2026-09-08_s24_VVM-M9-automated.md`;
+  - `verification/reports/2026-09-09_s24_VVM-M9-reboot.md`.
 
 Relevant verification IDs:
 
@@ -519,16 +523,11 @@ Relevant verification IDs:
 - `VVM-DUR-001..005` — PASS;
 - `VVM-REL-005` — PASS for normal and recovery save atomicity;
 - `UX-AT-009` — PASS;
-- `VVM-RECOV-005/006` — BLOCKED pending assisted S24 reboot execution.
+- `VVM-RECOV-005/006` — PASS on Samsung Galaxy S24 SM-S921B/DS with retained
+  GNSS and Running step source data.
 
-Known limitations / blocked verification:
+Known limitations:
 
-- the M9 exit criterion explicitly requires reference-device reboot recovery;
-  automatic post-boot acquisition is not required, but manual unlock, relaunch,
-  Resume, and post-reboot source checks are required;
-- the stationary physical process-loss smoke retained time checkpoints but no GNSS
-  or step samples; real-source process/reboot evidence remains deferred while
-  deterministic retained-source coverage passes;
 - the Gradle connected-device UTP wrapper encountered a missing
   `androidx.test.services` helper before test execution on this phone; installing
   the built app/test APKs and invoking AndroidJUnitRunner directly completed all
@@ -538,9 +537,8 @@ Known limitations / blocked verification:
 
 ## Next Work Item
 
-Complete assisted Samsung Galaxy S24 `VVM-RECOV-005/006` reboot recovery and
-post-reboot Resume verification. Do not mark M9 complete until that reference-device
-exit criterion passes.
+Begin M10 with the `ActivityAnalysisData` repository/application loader and its
+deterministic coverage before adding static Vico presentation.
 
 ---
 

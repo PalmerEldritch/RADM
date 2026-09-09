@@ -5,6 +5,9 @@ Date: 2026-09-08
 Status: PASS for implemented automated/stationary scope; M9 closure remains BLOCKED
 on assisted reboot verification.
 
+Closure update: the outstanding assisted reboot cases subsequently passed on
+2026-09-09. See `verification/reports/2026-09-09_s24_VVM-M9-reboot.md`.
+
 ## Environment
 
 | Item | Value |
