@@ -1,6 +1,10 @@
 package com.jeppe.radm.ui.analysis
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,6 +21,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -24,12 +29,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.jeppe.radm.domain.analysis.ActivityAnalysisData
+import com.jeppe.radm.domain.analysis.ActivityAnalysisInteractionSnapshot
 import com.jeppe.radm.domain.analysis.AnalysisCoordinateMode
 import com.jeppe.radm.domain.analysis.AnalysisPoint
 import com.jeppe.radm.domain.analysis.AnalysisSeries
@@ -48,6 +57,7 @@ import com.patrykandpatrick.vico.compose.cartesian.rememberCartesianChart
 import com.patrykandpatrick.vico.core.cartesian.axis.HorizontalAxis
 import com.patrykandpatrick.vico.core.cartesian.axis.VerticalAxis
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianChartModelProducer
+import com.patrykandpatrick.vico.core.cartesian.data.CartesianLayerRangeProvider
 import com.patrykandpatrick.vico.core.cartesian.data.CartesianValueFormatter
 import com.patrykandpatrick.vico.core.cartesian.data.lineSeries
 import java.time.Instant
@@ -61,6 +71,13 @@ object ActivityAnalysisTestTags {
     const val SCREEN = "activity_detail"
     const val COORDINATE = "analysis_coordinate"
     const val RANGE = "analysis_range"
+    const val COORDINATE_DISTANCE = "analysis_coordinate_distance"
+    const val COORDINATE_ELAPSED = "analysis_coordinate_elapsed"
+    const val RANGE_START = "analysis_range_start"
+    const val RANGE_END = "analysis_range_end"
+    const val RANGE_RESET = "analysis_range_reset"
+    const val ROUTE_RANGE = "analysis_route_range"
+    const val SELECTED_TIME = "analysis_selected_time"
     const val ROUTE = "analysis_route"
     const val ROUTE_UNAVAILABLE = "analysis_route_unavailable"
     const val INSPECTOR = "analysis_inspector"
@@ -72,14 +89,24 @@ object ActivityAnalysisTestTags {
     const val SPEED_UNAVAILABLE = "analysis_speed_unavailable"
     const val ELEVATION_UNAVAILABLE = "analysis_elevation_unavailable"
     const val CADENCE_UNAVAILABLE = "analysis_cadence_unavailable"
+
+    fun interaction(chartTag: String): String = "${chartTag}_interaction"
+    fun selection(chartTag: String): String = "${chartTag}_selection"
+    fun visibleRange(chartTag: String): String = "${chartTag}_range"
+    fun axis(chartTag: String): String = "${chartTag}_axis"
 }
 
 @Composable
 fun ActivityAnalysisScreen(
     data: ActivityAnalysisData,
+    interaction: ActivityAnalysisInteractionSnapshot,
     saving: Boolean,
     error: String?,
     onBack: () -> Unit,
+    onSelectFraction: (Double) -> Unit,
+    onCoordinateMode: (AnalysisCoordinateMode) -> Unit,
+    onRange: (Double, Double) -> Unit,
+    onRestoreFullRange: () -> Unit,
     onEdit: (ActivityType, String?, String?) -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -114,11 +141,17 @@ fun ActivityAnalysisScreen(
             }
 
             item {
-                AnalysisStateSummary(data)
+                AnalysisStateSummary(
+                    data = data,
+                    interaction = interaction,
+                    onCoordinateMode = onCoordinateMode,
+                    onRange = onRange,
+                    onRestoreFullRange = onRestoreFullRange,
+                )
             }
 
             item {
-                RouteSummary(data)
+                RouteSummary(data, interaction)
             }
 
             when (activity.type) {
@@ -129,7 +162,8 @@ fun ActivityAnalysisScreen(
                         name = "Pace",
                         unit = "min/km",
                         series = data.pace,
-                        coordinateMode = data.initialState.coordinateMode,
+                        interaction = interaction,
+                        onSelectFraction = onSelectFraction,
                         chartTag = ActivityAnalysisTestTags.PACE_CHART,
                         unavailableTag = ActivityAnalysisTestTags.PACE_UNAVAILABLE,
                         valueToY = { -it.value / 60.0 },
@@ -142,7 +176,8 @@ fun ActivityAnalysisScreen(
                         name = "Speed",
                         unit = "km/h",
                         series = data.speed,
-                        coordinateMode = data.initialState.coordinateMode,
+                        interaction = interaction,
+                        onSelectFraction = onSelectFraction,
                         chartTag = ActivityAnalysisTestTags.SPEED_CHART,
                         unavailableTag = ActivityAnalysisTestTags.SPEED_UNAVAILABLE,
                         valueToY = { it.value * 3.6 },
@@ -156,7 +191,8 @@ fun ActivityAnalysisScreen(
                     name = "Elevation",
                     unit = "m",
                     series = data.elevation,
-                    coordinateMode = data.initialState.coordinateMode,
+                    interaction = interaction,
+                    onSelectFraction = onSelectFraction,
                     chartTag = ActivityAnalysisTestTags.ELEVATION_CHART,
                     unavailableTag = ActivityAnalysisTestTags.ELEVATION_UNAVAILABLE,
                     valueToY = { it.value },
@@ -170,7 +206,8 @@ fun ActivityAnalysisScreen(
                         name = "Cadence",
                         unit = "spm",
                         series = data.cadence,
-                        coordinateMode = data.initialState.coordinateMode,
+                        interaction = interaction,
+                        onSelectFraction = onSelectFraction,
                         chartTag = ActivityAnalysisTestTags.CADENCE_CHART,
                         unavailableTag = ActivityAnalysisTestTags.CADENCE_UNAVAILABLE,
                         valueToY = { it.value },
@@ -180,7 +217,7 @@ fun ActivityAnalysisScreen(
             }
 
             item {
-                InitialInspector(data)
+                SelectedPositionInspector(data, interaction)
             }
 
             if (editing) {
@@ -261,10 +298,16 @@ fun ActivityAnalysisScreen(
 }
 
 @Composable
-private fun AnalysisStateSummary(data: ActivityAnalysisData) {
-    val state = data.initialState
+private fun AnalysisStateSummary(
+    data: ActivityAnalysisData,
+    interaction: ActivityAnalysisInteractionSnapshot,
+    onCoordinateMode: (AnalysisCoordinateMode) -> Unit,
+    onRange: (Double, Double) -> Unit,
+    onRestoreFullRange: () -> Unit,
+) {
+    val state = interaction.state
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Analysis view", style = MaterialTheme.typography.titleMedium)
             Text(
                 "Horizontal coordinate: " + when (state.coordinateMode) {
@@ -273,25 +316,66 @@ private fun AnalysisStateSummary(data: ActivityAnalysisData) {
                 },
                 modifier = Modifier.testTag(ActivityAnalysisTestTags.COORDINATE),
             )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = state.coordinateMode == AnalysisCoordinateMode.DISTANCE,
+                    onClick = { onCoordinateMode(AnalysisCoordinateMode.DISTANCE) },
+                    enabled = data.distance.availability == AnalysisSeriesAvailability.AVAILABLE,
+                    label = { Text("Distance") },
+                    modifier = Modifier.testTag(ActivityAnalysisTestTags.COORDINATE_DISTANCE),
+                )
+                FilterChip(
+                    selected = state.coordinateMode == AnalysisCoordinateMode.ACTIVE_ELAPSED_TIME,
+                    onClick = { onCoordinateMode(AnalysisCoordinateMode.ACTIVE_ELAPSED_TIME) },
+                    label = { Text("Active elapsed time") },
+                    modifier = Modifier.testTag(ActivityAnalysisTestTags.COORDINATE_ELAPSED),
+                )
+            }
             Text(
-                when (state.coordinateMode) {
-                    AnalysisCoordinateMode.DISTANCE -> {
-                        val start = state.range.start.cumulativeDistance?.value ?: 0.0
-                        val end = state.range.endInclusive.cumulativeDistance?.value ?: start
-                        "Full range: ${formatDistance(start)}–${formatDistance(end)}"
-                    }
-                    AnalysisCoordinateMode.ACTIVE_ELAPSED_TIME ->
-                        "Full range: ${formatDuration(state.range.start.activeElapsedTime.value)}–" +
-                            formatDuration(state.range.endInclusive.activeElapsedTime.value)
-                },
+                "Selected range: ${formatRange(state.range, state.coordinateMode)}",
                 modifier = Modifier.testTag(ActivityAnalysisTestTags.RANGE),
             )
+            Text("Range start")
+            Slider(
+                value = interaction.rangeStartFraction.toFloat(),
+                onValueChange = {
+                    onRange(
+                        it.toDouble().coerceAtMost(interaction.rangeEndFraction),
+                        interaction.rangeEndFraction,
+                    )
+                },
+                valueRange = 0f..1f,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(ActivityAnalysisTestTags.RANGE_START),
+            )
+            Text("Range end")
+            Slider(
+                value = interaction.rangeEndFraction.toFloat(),
+                onValueChange = {
+                    onRange(
+                        interaction.rangeStartFraction,
+                        it.toDouble().coerceAtLeast(interaction.rangeStartFraction),
+                    )
+                },
+                valueRange = 0f..1f,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(ActivityAnalysisTestTags.RANGE_END),
+            )
+            TextButton(
+                onClick = onRestoreFullRange,
+                modifier = Modifier.testTag(ActivityAnalysisTestTags.RANGE_RESET),
+            ) { Text("Restore full range") }
         }
     }
 }
 
 @Composable
-private fun RouteSummary(data: ActivityAnalysisData) {
+private fun RouteSummary(
+    data: ActivityAnalysisData,
+    interaction: ActivityAnalysisInteractionSnapshot,
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Route", style = MaterialTheme.typography.titleMedium)
@@ -308,6 +392,17 @@ private fun RouteSummary(data: ActivityAnalysisData) {
                     modifier = Modifier.testTag(ActivityAnalysisTestTags.ROUTE),
                 )
                 Text("Route geometry is available locally; recorded gaps remain separate.")
+                val range = interaction.state.range
+                val selectedCount = data.routeSegments.sumOf { segment ->
+                    segment.samples.count { sample ->
+                        sample.activeElapsedTime in
+                            range.start.activeElapsedTime..range.endInclusive.activeElapsedTime
+                    }
+                }
+                Text(
+                    "Route subsection: $selectedCount of $count recorded positions",
+                    modifier = Modifier.testTag(ActivityAnalysisTestTags.ROUTE_RANGE),
+                )
             }
         }
     }
@@ -318,7 +413,8 @@ private fun <T : Any> MetricSection(
     name: String,
     unit: String,
     series: AnalysisSeries<T>,
-    coordinateMode: AnalysisCoordinateMode,
+    interaction: ActivityAnalysisInteractionSnapshot,
+    onSelectFraction: (Double) -> Unit,
     chartTag: String,
     unavailableTag: String,
     valueToY: (T) -> Double,
@@ -331,16 +427,28 @@ private fun <T : Any> MetricSection(
         ) {
             Text("$name · $unit", style = MaterialTheme.typography.titleMedium)
             if (series.availability == AnalysisSeriesAvailability.AVAILABLE) {
+                val coordinateMode = interaction.state.coordinateMode
                 Text(
                     "Horizontal axis: " + if (coordinateMode == AnalysisCoordinateMode.DISTANCE) {
                         "Distance (km)"
                     } else {
                         "Active Elapsed Time"
                     },
+                    modifier = Modifier.testTag(ActivityAnalysisTestTags.axis(chartTag)),
+                )
+                Text(
+                    "Cursor: ${formatDuration(interaction.state.selectedPosition.activeElapsedTime.value)}",
+                    modifier = Modifier.testTag(ActivityAnalysisTestTags.selection(chartTag)),
+                )
+                Text(
+                    "Visible: ${formatRange(interaction.state.range, coordinateMode)}",
+                    modifier = Modifier.testTag(ActivityAnalysisTestTags.visibleRange(chartTag)),
                 )
                 StaticMetricChart(
                     points = series.points,
-                    coordinateMode = coordinateMode,
+                    interaction = interaction,
+                    onSelectFraction = onSelectFraction,
+                    interactionTag = ActivityAnalysisTestTags.interaction(chartTag),
                     valueToY = valueToY,
                     yFormatter = yFormatter,
                     modifier = Modifier
@@ -361,12 +469,18 @@ private fun <T : Any> MetricSection(
 @Composable
 private fun <T : Any> StaticMetricChart(
     points: List<AnalysisPoint<T>>,
-    coordinateMode: AnalysisCoordinateMode,
+    interaction: ActivityAnalysisInteractionSnapshot,
+    onSelectFraction: (Double) -> Unit,
+    interactionTag: String,
     valueToY: (T) -> Double,
     yFormatter: (Double) -> String,
     modifier: Modifier = Modifier,
 ) {
-    val segments = chartSegments(points, coordinateMode, valueToY)
+    val coordinateMode = interaction.state.coordinateMode
+    val segments = remember(points, coordinateMode, interaction.state.range) {
+        chartSegments(points, coordinateMode, interaction.state.range, valueToY)
+    }
+    val currentOnSelectFraction by rememberUpdatedState(onSelectFraction)
     val modelProducer = remember { CartesianChartModelProducer() }
     LaunchedEffect(segments) {
         modelProducer.runTransaction {
@@ -384,29 +498,74 @@ private fun <T : Any> StaticMetricChart(
             }
         }
     }
-    val verticalFormatter = remember(yFormatter) {
+    val verticalFormatter = remember(interactionTag) {
         CartesianValueFormatter { _, value, _ -> yFormatter(value) }
     }
-    CartesianChartHost(
-        chart = rememberCartesianChart(
-            rememberLineCartesianLayer(),
-            startAxis = VerticalAxis.rememberStart(valueFormatter = verticalFormatter),
-            bottomAxis = HorizontalAxis.rememberBottom(valueFormatter = horizontalFormatter),
-        ),
-        modelProducer = modelProducer,
-        modifier = modifier,
-    )
+    val chartStart = interaction.visibleCoordinateExtent.start.toChartCoordinate(coordinateMode)
+    val requestedChartEnd = interaction.visibleCoordinateExtent.endInclusive.toChartCoordinate(coordinateMode)
+    val chartEnd = if (requestedChartEnd > chartStart) requestedChartEnd else chartStart + 0.001
+    val rangeProvider = remember(chartStart, chartEnd) {
+        CartesianLayerRangeProvider.fixed(minX = chartStart, maxX = chartEnd)
+    }
+    val cursorColor = MaterialTheme.colorScheme.primary
+    Box(modifier = modifier) {
+        CartesianChartHost(
+            chart = rememberCartesianChart(
+                rememberLineCartesianLayer(rangeProvider = rangeProvider),
+                startAxis = VerticalAxis.rememberStart(valueFormatter = verticalFormatter),
+                bottomAxis = HorizontalAxis.rememberBottom(valueFormatter = horizontalFormatter),
+            ),
+            modelProducer = modelProducer,
+            modifier = Modifier.fillMaxSize(),
+        )
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = 48.dp, end = 8.dp, top = 8.dp, bottom = 28.dp)
+                .testTag(interactionTag)
+                .pointerInput(interaction.visibleCoordinateExtent) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        currentOnSelectFraction((down.position.x / size.width).toDouble())
+                        var pressed = down.pressed
+                        while (pressed) {
+                            val event = awaitPointerEvent()
+                            event.changes.forEach { change ->
+                                currentOnSelectFraction((change.position.x / size.width).toDouble())
+                                change.consume()
+                            }
+                            pressed = event.changes.any { it.pressed }
+                        }
+                    }
+                },
+        ) {
+            interaction.cursorFraction?.let { fraction ->
+                val x = size.width * fraction.toFloat()
+                drawLine(
+                    color = cursorColor,
+                    start = Offset(x, 0f),
+                    end = Offset(x, size.height),
+                    strokeWidth = 3.dp.toPx(),
+                )
+            }
+        }
+    }
 }
 
 @Composable
-private fun InitialInspector(data: ActivityAnalysisData) {
-    val inspector = data.initialInspector
+private fun SelectedPositionInspector(
+    data: ActivityAnalysisData,
+    interaction: ActivityAnalysisInteractionSnapshot,
+) {
+    val inspector = interaction.inspector
     Card(modifier = Modifier.fillMaxWidth().testTag(ActivityAnalysisTestTags.INSPECTOR)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text("Selected position", style = MaterialTheme.typography.titleMedium)
-            Text("Initial activity position")
             Text("Distance: ${inspector.position.cumulativeDistance?.value?.let(::formatDistance) ?: "—"}")
-            Text("Active elapsed time: ${formatDuration(inspector.position.activeElapsedTime.value)}")
+            Text(
+                "Active elapsed time: ${formatDuration(inspector.position.activeElapsedTime.value)}",
+                modifier = Modifier.testTag(ActivityAnalysisTestTags.SELECTED_TIME),
+            )
             when (data.activity.type) {
                 ActivityType.RUNNING,
                 ActivityType.CROSS_COUNTRY_SKIING,
@@ -429,6 +588,7 @@ private data class ChartSegment(
 private fun <T : Any> chartSegments(
     points: List<AnalysisPoint<T>>,
     coordinateMode: AnalysisCoordinateMode,
+    range: com.jeppe.radm.domain.analysis.AnalysisRange,
     valueToY: (T) -> Double,
 ): List<ChartSegment> {
     val result = mutableListOf<ChartSegment>()
@@ -443,6 +603,13 @@ private fun <T : Any> chartSegments(
     }
 
     points.forEach { point ->
+        if (point.position.activeElapsedTime !in
+            range.start.activeElapsedTime..range.endInclusive.activeElapsedTime
+        ) {
+            flush()
+            group = null
+            return@forEach
+        }
         val x = when (coordinateMode) {
             AnalysisCoordinateMode.DISTANCE -> point.position.cumulativeDistance?.value?.div(1_000.0)
             AnalysisCoordinateMode.ACTIVE_ELAPSED_TIME -> point.position.activeElapsedTime.value / 60_000.0
@@ -465,6 +632,27 @@ private fun <T : Any> chartSegments(
     }
     flush()
     return result
+}
+
+private fun Double.toChartCoordinate(mode: AnalysisCoordinateMode): Double = when (mode) {
+    AnalysisCoordinateMode.DISTANCE -> this / 1_000.0
+    AnalysisCoordinateMode.ACTIVE_ELAPSED_TIME -> this / 60_000.0
+}
+
+private fun formatRange(
+    range: com.jeppe.radm.domain.analysis.AnalysisRange,
+    mode: AnalysisCoordinateMode,
+): String = when (mode) {
+    AnalysisCoordinateMode.DISTANCE -> {
+        val start = range.start.cumulativeDistance?.value
+        val end = range.endInclusive.cumulativeDistance?.value
+        if (start == null || end == null) "Distance unavailable" else {
+            "${formatDistance(start)}–${formatDistance(end)}"
+        }
+    }
+    AnalysisCoordinateMode.ACTIVE_ELAPSED_TIME ->
+        "${formatDuration(range.start.activeElapsedTime.value)}–" +
+            formatDuration(range.endInclusive.activeElapsedTime.value)
 }
 
 private fun AnalysisSeriesAvailability.explanation(): String = when (this) {

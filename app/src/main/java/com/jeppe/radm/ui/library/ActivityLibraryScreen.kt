@@ -50,14 +50,20 @@ fun ActivityLibraryScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val selected = state.selected
-    if (selected == null) {
+    val analysisInteraction = state.analysisInteraction
+    if (selected == null || analysisInteraction == null) {
         LibraryListContent(state, viewModel::open, onStartActivity)
     } else {
         ActivityAnalysisScreen(
             data = selected,
+            interaction = analysisInteraction,
             saving = state.saving,
             error = state.error,
             onBack = viewModel::closeActivity,
+            onSelectFraction = viewModel::selectAnalysisFraction,
+            onCoordinateMode = viewModel::setAnalysisCoordinateMode,
+            onRange = viewModel::setAnalysisRange,
+            onRestoreFullRange = viewModel::restoreFullAnalysisRange,
             onEdit = viewModel::edit,
             onDelete = viewModel::deleteSelected,
         )

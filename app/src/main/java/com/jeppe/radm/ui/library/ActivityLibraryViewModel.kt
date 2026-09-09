@@ -9,6 +9,9 @@ import com.jeppe.radm.application.library.DeleteSavedActivity
 import com.jeppe.radm.application.library.EditSavedActivity
 import com.jeppe.radm.application.library.LoadActivityLibrary
 import com.jeppe.radm.domain.analysis.ActivityAnalysisData
+import com.jeppe.radm.domain.analysis.ActivityAnalysisInteraction
+import com.jeppe.radm.domain.analysis.ActivityAnalysisInteractionSnapshot
+import com.jeppe.radm.domain.analysis.AnalysisCoordinateMode
 import com.jeppe.radm.domain.model.AbsoluteTimestampUtcMillis
 import com.jeppe.radm.domain.model.ActivityId
 import com.jeppe.radm.domain.model.ActivityLibraryItem
@@ -24,6 +27,7 @@ import kotlinx.coroutines.withContext
 data class ActivityLibraryUiState(
     val items: List<ActivityLibraryItem> = emptyList(),
     val selected: ActivityAnalysisData? = null,
+    val analysisInteraction: ActivityAnalysisInteractionSnapshot? = null,
     val loading: Boolean = true,
     val saving: Boolean = false,
     val error: String? = null,
@@ -36,6 +40,7 @@ class ActivityLibraryViewModel(
     private val deleteSavedActivity: DeleteSavedActivity,
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(ActivityLibraryUiState())
+    private var interaction: ActivityAnalysisInteraction? = null
     val state: StateFlow<ActivityLibraryUiState> = mutableState.asStateFlow()
 
     init {
@@ -54,14 +59,45 @@ class ActivityLibraryViewModel(
     fun open(activityId: ActivityId) {
         viewModelScope.launch {
             mutableState.update { it.copy(loading = true, error = null) }
-            runCatching { withContext(Dispatchers.IO) { loadActivityAnalysis(activityId) } }
-                .onSuccess { selected -> mutableState.update { it.copy(selected = selected, loading = false) } }
+            runCatching {
+                val selected = withContext(Dispatchers.IO) { loadActivityAnalysis(activityId) }
+                val interaction = withContext(Dispatchers.Default) {
+                    ActivityAnalysisInteraction(selected)
+                }
+                selected to interaction
+            }.onSuccess { (selected, loadedInteraction) ->
+                interaction = loadedInteraction
+                mutableState.update {
+                    it.copy(
+                        selected = selected,
+                        analysisInteraction = loadedInteraction.snapshot,
+                        loading = false,
+                    )
+                }
+            }
                 .onFailure(::publishFailure)
         }
     }
 
     fun closeActivity() {
-        mutableState.update { it.copy(selected = null, error = null) }
+        interaction = null
+        mutableState.update { it.copy(selected = null, analysisInteraction = null, error = null) }
+    }
+
+    fun selectAnalysisFraction(fraction: Double) {
+        updateInteraction { selectVisibleFraction(fraction) }
+    }
+
+    fun setAnalysisCoordinateMode(mode: AnalysisCoordinateMode) {
+        updateInteraction { setCoordinateMode(mode) }
+    }
+
+    fun setAnalysisRange(startFraction: Double, endFraction: Double) {
+        updateInteraction { setRangeFractions(startFraction, endFraction) }
+    }
+
+    fun restoreFullAnalysisRange() {
+        updateInteraction { restoreFullRange() }
     }
 
     fun edit(
@@ -82,12 +118,22 @@ class ActivityLibraryViewModel(
                         updatedAt = AbsoluteTimestampUtcMillis(System.currentTimeMillis()),
                     )
                 }
-                withContext(Dispatchers.IO) {
+                val selectedAndItems = withContext(Dispatchers.IO) {
                     loadActivityAnalysis(activityId) to loadLibrary()
                 }
-            }.onSuccess { (selected, items) ->
+                val loadedInteraction = withContext(Dispatchers.Default) {
+                    ActivityAnalysisInteraction(selectedAndItems.first)
+                }
+                Triple(selectedAndItems.first, selectedAndItems.second, loadedInteraction)
+            }.onSuccess { (selected, items, loadedInteraction) ->
+                interaction = loadedInteraction
                 mutableState.update {
-                    it.copy(items = items, selected = selected, saving = false)
+                    it.copy(
+                        items = items,
+                        selected = selected,
+                        analysisInteraction = loadedInteraction.snapshot,
+                        saving = false,
+                    )
                 }
             }.onFailure(::publishFailure)
         }
@@ -103,6 +149,7 @@ class ActivityLibraryViewModel(
                     loadLibrary()
                 }
             }.onSuccess { items ->
+                interaction = null
                 mutableState.value = ActivityLibraryUiState(items = items, loading = false)
             }.onFailure(::publishFailure)
         }
@@ -116,6 +163,14 @@ class ActivityLibraryViewModel(
                 error = failure.message ?: "Activity operation failed",
             )
         }
+    }
+
+    private inline fun updateInteraction(
+        update: ActivityAnalysisInteraction.() -> ActivityAnalysisInteractionSnapshot,
+    ) {
+        val interaction = interaction ?: return
+        val snapshot = interaction.update()
+        mutableState.update { it.copy(analysisInteraction = snapshot) }
     }
 
     companion object {

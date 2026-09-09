@@ -2,9 +2,9 @@
 
 ## Current State
 
-Current milestone: **M11 — Synchronized graph analysis (not started)**
+Current milestone: **M12 — Map integration and full synchronization (not started)**
 
-Last completed milestone: **M10 — Static Activity Analysis**
+Last completed milestone: **M11 — Synchronized graph analysis**
 
 ---
 
@@ -23,7 +23,7 @@ Last completed milestone: **M10 — Static Activity Analysis**
 | M8 — Activity finalization and library | PASS | 2026-09-07 |
 | M9 — Durability and recovery | PASS | 2026-09-09 |
 | M10 — Static Activity Analysis | PASS | 2026-09-09 |
-| M11 — Synchronized graph analysis | NOT_STARTED | — |
+| M11 — Synchronized graph analysis | PASS | 2026-09-09 |
 | M12 — Map integration and full synchronization | NOT_STARTED | — |
 | M13 — Scale, performance and compatibility | NOT_STARTED | — |
 | M14 — Physical-device validation and release hardening | NOT_STARTED | — |
@@ -602,10 +602,71 @@ Deferred verification and scope:
 
 ---
 
+## M11 Implementation Record
+
+Status: **PASS**
+
+Implemented:
+
+- one authoritative RADM interaction state owns selected active elapsed time,
+  coordinate mode, range start, and range end for every analysis graph;
+- a pure JVM lookup index precomputes sorted local structures and provides binary
+  time → distance, distance → time, and time → metric interpolation without
+  Android, Room, network, or Vico dependencies;
+- lookup and coordinate conversion preserve route and counter-epoch
+  discontinuities instead of interpolating across incompatible boundaries;
+- Compose-owned graph overlays translate touch and continuous drag position into
+  the canonical model, while Vico remains only the series renderer;
+- every applicable graph renders a persistent cursor and common range from the
+  same state, and the persistent numerical inspector updates from the same
+  selected elapsed time;
+- shared Distance / Active Elapsed Time controls preserve the logical selection
+  and range while updating every graph axis;
+- separate touch-sized range-start/range-end controls constrain all graphs,
+  identify the corresponding route sample subsection, clamp an excluded selected
+  position to the nearest range boundary, and expose full-range restoration;
+- high-frequency selection performs only binary in-memory lookups and Compose
+  state publication; chart-series projection is memoized outside selection-only
+  recomposition;
+- analysis index creation occurs off the main thread, after local M10 loading;
+- deterministic early profiling exercises 100,000 loaded points and 10,000
+  selections without repository availability.
+
+Verification:
+
+- `./gradlew check assembleDebug assembleDebugAndroidTest` — PASS;
+- JVM tests — PASS (90 tests, 0 failures);
+- direct AndroidJUnitRunner suite — PASS on Pixel_10 AVD, Android 17 / API 37
+  (52 tests, 0 failures, 3 skipped existing physical-device/opt-in cases);
+- targeted M11 Compose suite — PASS (3 tests, 0 failures);
+- Android lint/static checks and debug build — PASS;
+- `git diff --check` — PASS;
+- evidence — `verification/reports/2026-09-09_pixel10_VVM-M11.md`.
+
+Relevant verification IDs:
+
+- `VVM-AN-002` — PASS;
+- `VVM-AN-003` — PASS for the graph/inspector portion; map marker completion is
+  M12;
+- `VVM-AN-005/006` — PASS;
+- `VVM-AN-007` — PASS for common graph range and local route-subsection
+  identification; map highlighting is M12;
+- `VVM-PERF-001/002` — early deterministic profiling begun, formal status
+  `NOT_RUN` until reference-device rendered latency/update-rate measurement.
+
+Deferred verification and scope:
+
+- MapLibre/OpenFreeMap rendering, graph-to-map and map-to-graph synchronization,
+  and map viewport independence are M12;
+- formal performance evidence is M13 on Samsung Galaxy S24 SM-S921B/DS;
+- no physical-device claim is made by the M11 emulator evidence.
+
+---
+
 ## Next Work Item
 
-Begin M11 with a single in-memory analysis interaction state, binary-search
-lookups, coordinate switching, range controls, and synchronized Vico selection.
+Begin M12 with MapLibre/OpenFreeMap route rendering behind a presentation adapter,
+then connect map selection and marker state to the existing canonical M11 model.
 
 ---
 

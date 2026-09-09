@@ -177,7 +177,7 @@ class LoadActivityAnalysisTest {
     }
 }
 
-private fun analysisRepository(): AnalysisRepositoryFake {
+internal fun analysisRepository(): AnalysisRepositoryFake {
     val id = ActivityId.parse("40000000-0000-4000-8000-000000000010")
     val startedAt = AbsoluteTimestampUtcMillis(1_788_379_200_000L)
     val activity = Activity(
@@ -252,7 +252,7 @@ private fun analysisRepository(): AnalysisRepositoryFake {
     return AnalysisRepositoryFake(activity, positions, steps, metrics, cadence, summary)
 }
 
-private class AnalysisRepositoryFake(
+internal class AnalysisRepositoryFake(
     var activity: Activity,
     var positions: List<PositionSample>,
     private var steps: List<StepSample>,

@@ -275,11 +275,11 @@ Verification matrix         Baseline
 Implementation plan         Baseline
 Architecture ADRs 001–009   Accepted
 
-Implementation              M10 complete; M11 not started
+Implementation              M11 complete; M12 not started
 Last local gate             ./gradlew check assembleDebug — PASS (2026-09-09)
-Applicable M10 VVM          AN-001, AN-010/011, OFF-001 — PASS; OFF-002 local scope — PASS
-JVM tests                   83 tests — PASS
-Android instrumentation     49 tests — PASS (3 physical-device/opt-in skips; Pixel_10 AVD, Android 17 / API 37, 2026-09-09)
+Applicable M11 VVM          AN-002, AN-005/006 — PASS; AN-003/007 graph portions — PASS
+JVM tests                   90 tests — PASS
+Android instrumentation     52 tests — PASS (3 physical-device/opt-in skips; Pixel_10 AVD, Android 17 / API 37, 2026-09-09)
 M5 physical smoke           PASS (Galaxy S24 SM-S921B/DS)
 M6 physical step source     PASS (18 retained events; 17 within-epoch steps)
 M9 physical reboot          RECOV-005/006 — PASS (Galaxy S24 SM-S921B/DS, 2026-09-09)
@@ -338,6 +338,15 @@ both locally stored analysis and the complete record → save → browse → ana
 workflow. Static MapLibre rendering remains optional at M10 and is deferred to
 M12. See
 [`verification/reports/2026-09-09_pixel10_VVM-M10.md`](verification/reports/2026-09-09_pixel10_VVM-M10.md).
+
+M11 adds one canonical active-elapsed-time selection/range model, binary in-memory
+time↔distance and time→metric lookup, shared coordinate and range controls,
+Compose-owned graph drag/cursor overlays, and a synchronized persistent inspector.
+All Vico graphs now share selection, visible range, and coordinate mode without
+placing Room queries or full-series recalculation in the pointer-movement path.
+Early 100,000-point JVM profiling is recorded, while formal reference-device
+render latency and update-rate acceptance remain M13. See
+[`verification/reports/2026-09-09_pixel10_VVM-M11.md`](verification/reports/2026-09-09_pixel10_VVM-M11.md).
 
 The Android application-backup policy remains intentionally open and must be resolved before R00 release.
 
