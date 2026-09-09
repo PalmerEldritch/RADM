@@ -275,11 +275,11 @@ Verification matrix         Baseline
 Implementation plan         Baseline
 Architecture ADRs 001–009   Accepted
 
-Implementation              M9 complete; M10 not started
+Implementation              M10 complete; M11 not started
 Last local gate             ./gradlew check assembleDebug — PASS (2026-09-09)
-Applicable M9 VVM           RECOV-001..006, DUR-001..005, REL-005 — PASS
-JVM tests                   77 tests — PASS
-Android instrumentation     42 tests — PASS (2 opt-in human/device skips; Galaxy S24, Android 16 / API 36, 2026-09-08)
+Applicable M10 VVM          AN-001, AN-010/011, OFF-001 — PASS; OFF-002 local scope — PASS
+JVM tests                   83 tests — PASS
+Android instrumentation     49 tests — PASS (3 physical-device/opt-in skips; Pixel_10 AVD, Android 17 / API 37, 2026-09-09)
 M5 physical smoke           PASS (Galaxy S24 SM-S921B/DS)
 M6 physical step source     PASS (18 retained events; 17 within-epoch steps)
 M9 physical reboot          RECOV-005/006 — PASS (Galaxy S24 SM-S921B/DS, 2026-09-09)
@@ -328,6 +328,16 @@ process-interruption coverage and mandatory reference-device reboot recovery
 [`verification/reports/2026-09-08_s24_VVM-M9-automated.md`](verification/reports/2026-09-08_s24_VVM-M9-automated.md)
 and
 [`verification/reports/2026-09-09_s24_VVM-M9-reboot.md`](verification/reports/2026-09-09_s24_VVM-M9-reboot.md).
+
+M10 loads each saved activity into one persistence-neutral, in-memory analysis
+dataset and presents its header, full-range initial state, local route-data
+status, type-specific static Vico graphs, and initial inspector. Processor-version
+validity prevents stale derived output from appearing current; missing route,
+elevation, or cadence data remains isolated. Offline emulator coverage passes for
+both locally stored analysis and the complete record → save → browse → analysis
+workflow. Static MapLibre rendering remains optional at M10 and is deferred to
+M12. See
+[`verification/reports/2026-09-09_pixel10_VVM-M10.md`](verification/reports/2026-09-09_pixel10_VVM-M10.md).
 
 The Android application-backup policy remains intentionally open and must be resolved before R00 release.
 

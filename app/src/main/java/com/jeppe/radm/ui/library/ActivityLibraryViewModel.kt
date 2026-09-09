@@ -4,11 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.jeppe.radm.RadmContainer
+import com.jeppe.radm.application.analysis.LoadActivityAnalysis
 import com.jeppe.radm.application.library.DeleteSavedActivity
 import com.jeppe.radm.application.library.EditSavedActivity
 import com.jeppe.radm.application.library.LoadActivityLibrary
-import com.jeppe.radm.application.library.LoadSavedActivity
-import com.jeppe.radm.application.library.SavedActivityDetails
+import com.jeppe.radm.domain.analysis.ActivityAnalysisData
 import com.jeppe.radm.domain.model.AbsoluteTimestampUtcMillis
 import com.jeppe.radm.domain.model.ActivityId
 import com.jeppe.radm.domain.model.ActivityLibraryItem
@@ -23,7 +23,7 @@ import kotlinx.coroutines.withContext
 
 data class ActivityLibraryUiState(
     val items: List<ActivityLibraryItem> = emptyList(),
-    val selected: SavedActivityDetails? = null,
+    val selected: ActivityAnalysisData? = null,
     val loading: Boolean = true,
     val saving: Boolean = false,
     val error: String? = null,
@@ -31,7 +31,7 @@ data class ActivityLibraryUiState(
 
 class ActivityLibraryViewModel(
     private val loadLibrary: LoadActivityLibrary,
-    private val loadSavedActivity: LoadSavedActivity,
+    private val loadActivityAnalysis: LoadActivityAnalysis,
     private val editSavedActivity: EditSavedActivity,
     private val deleteSavedActivity: DeleteSavedActivity,
 ) : ViewModel() {
@@ -54,7 +54,7 @@ class ActivityLibraryViewModel(
     fun open(activityId: ActivityId) {
         viewModelScope.launch {
             mutableState.update { it.copy(loading = true, error = null) }
-            runCatching { withContext(Dispatchers.IO) { loadSavedActivity(activityId) } }
+            runCatching { withContext(Dispatchers.IO) { loadActivityAnalysis(activityId) } }
                 .onSuccess { selected -> mutableState.update { it.copy(selected = selected, loading = false) } }
                 .onFailure(::publishFailure)
         }
@@ -83,7 +83,7 @@ class ActivityLibraryViewModel(
                     )
                 }
                 withContext(Dispatchers.IO) {
-                    loadSavedActivity(activityId) to loadLibrary()
+                    loadActivityAnalysis(activityId) to loadLibrary()
                 }
             }.onSuccess { (selected, items) ->
                 mutableState.update {
@@ -125,7 +125,7 @@ class ActivityLibraryViewModel(
                 override fun <T : ViewModel> create(modelClass: Class<T>): T =
                     ActivityLibraryViewModel(
                         container.loadActivityLibrary,
-                        container.loadSavedActivity,
+                        container.loadActivityAnalysis,
                         container.editSavedActivity,
                         container.deleteSavedActivity,
                     ) as T

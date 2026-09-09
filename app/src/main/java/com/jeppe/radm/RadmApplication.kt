@@ -1,6 +1,7 @@
 package com.jeppe.radm
 
 import android.app.Application
+import com.jeppe.radm.application.analysis.LoadActivityAnalysis
 import com.jeppe.radm.data.db.RadmDatabaseFactory
 import com.jeppe.radm.data.repository.RoomActivityRepository
 import com.jeppe.radm.data.repository.RoomRecordingRepository
@@ -32,6 +33,7 @@ class RadmContainer(application: Application) {
     val recalculateActivity by lazy { RecalculateActivity(activityRepository) }
     val loadActivityLibrary by lazy { LoadActivityLibrary(activityRepository) }
     val loadSavedActivity by lazy { LoadSavedActivity(activityRepository) }
+    val loadActivityAnalysis by lazy { LoadActivityAnalysis(activityRepository) }
     val editSavedActivity by lazy { EditSavedActivity(activityRepository, recalculateActivity) }
     val deleteSavedActivity by lazy { DeleteSavedActivity(activityRepository) }
     val recordingStateStore = RecordingServiceStateStore()

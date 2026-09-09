@@ -2,9 +2,9 @@
 
 ## Current State
 
-Current milestone: **M10 — Static Activity Analysis (not started)**
+Current milestone: **M11 — Synchronized graph analysis (not started)**
 
-Last completed milestone: **M9 — Durability and Recovery**
+Last completed milestone: **M10 — Static Activity Analysis**
 
 ---
 
@@ -22,7 +22,7 @@ Last completed milestone: **M9 — Durability and Recovery**
 | M7 — Final processors and summaries | PASS | 2026-09-07 |
 | M8 — Activity finalization and library | PASS | 2026-09-07 |
 | M9 — Durability and recovery | PASS | 2026-09-09 |
-| M10 — Static Activity Analysis | NOT_STARTED | — |
+| M10 — Static Activity Analysis | PASS | 2026-09-09 |
 | M11 — Synchronized graph analysis | NOT_STARTED | — |
 | M12 — Map integration and full synchronization | NOT_STARTED | — |
 | M13 — Scale, performance and compatibility | NOT_STARTED | — |
@@ -535,10 +535,77 @@ Known limitations:
 
 ---
 
+## M10 Implementation Record
+
+Status: **PASS**
+
+Implemented:
+
+- the application-level analysis loader assembles saved metadata, current
+  summary, route segments, source elevation, distance, type-specific pace/speed,
+  Running cadence, and processor validity into one persistence-neutral in-memory
+  `ActivityAnalysisData`;
+- current processor versions gate derived presentation so retained stale, failed,
+  or unprocessed output is never presented as current;
+- active elapsed time remains present on every point and authoritative, while
+  Distance is the initial user-facing coordinate where a current distance series
+  exists;
+- no-route activities fall back to Active Elapsed Time, keeping cadence,
+  metadata, and the inspector usable rather than fabricating distance;
+- route segments and step-counter epochs are explicit chart continuity groups,
+  and cadence distance interpolation cannot cross a route boundary;
+- saved activities now open a complete static analysis screen with a recognizable
+  header, full-range/coordinate state, local route-data status, Vico pace/speed,
+  elevation, and Running cadence graphs, an initial point inspector, and explicit
+  isolated unavailable states;
+- activity-type presentation is enforced: Running shows pace/elevation/cadence,
+  Cycling shows speed/elevation, and Cross-country skiing shows pace/elevation;
+- the analysis workflow continues to support metadata editing and protected
+  deletion, with prior M8 interaction coverage adapted to the longer lazy layout;
+- offline instrumentation covers both pre-seeded local analysis and the complete
+  record → pause/resume → save → browse → analysis workflow.
+
+Verification:
+
+- `./gradlew check assembleDebug` — PASS;
+- JVM tests — PASS (83 tests, 0 failures);
+- direct AndroidJUnitRunner suite — PASS on Pixel_10 AVD, Android 17 / API 37
+  (49 tests, 0 failures, 3 skipped existing physical-device/opt-in cases);
+- targeted M10 Compose suite — PASS (5 tests, 0 failures);
+- Android lint/static checks and debug build — PASS;
+- `git diff --check` — PASS;
+- evidence — `verification/reports/2026-09-09_pixel10_VVM-M10.md`.
+
+Relevant verification IDs:
+
+- `VVM-AN-001` — PASS;
+- `VVM-AN-010/011` — PASS;
+- `VVM-OFF-001` — PASS;
+- `VVM-OFF-002` — PASS for the M10-applicable local route-data and graph scope;
+  basemap-failure presentation is `NOT_APPLICABLE` until MapLibre integration in
+  M12;
+- `UX-AT-011` — PASS for the M10 static-analysis scope.
+
+Specification interpretation:
+
+- `UXM-COORD-002`/`UXM-INIT-002` state Distance as the initial coordinate, while
+  PRD sections 42/44 qualify it as default "where meaningful"; M10 follows the
+  PRD qualification for no-route activities and uses Active Elapsed Time when no
+  current distance coordinate exists.
+
+Deferred verification and scope:
+
+- synchronized selection/range/coordinate interaction is M11;
+- MapLibre rendering and full map/graph/inspector synchronization is M12;
+- scale and performance evidence is M13;
+- no physical-device claim is made by the M10 emulator evidence.
+
+---
+
 ## Next Work Item
 
-Begin M10 with the `ActivityAnalysisData` repository/application loader and its
-deterministic coverage before adding static Vico presentation.
+Begin M11 with a single in-memory analysis interaction state, binary-search
+lookups, coordinate switching, range controls, and synchronized Vico selection.
 
 ---
 

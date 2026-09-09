@@ -3,7 +3,6 @@ package com.jeppe.radm.ui.library
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,29 +10,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import com.jeppe.radm.application.library.SavedActivityDetails
 import com.jeppe.radm.domain.model.ActivityLibraryItem
 import com.jeppe.radm.domain.model.ActivityType
+import com.jeppe.radm.ui.analysis.ActivityAnalysisScreen
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -63,8 +53,8 @@ fun ActivityLibraryScreen(
     if (selected == null) {
         LibraryListContent(state, viewModel::open, onStartActivity)
     } else {
-        ActivityDetailContent(
-            details = selected,
+        ActivityAnalysisScreen(
+            data = selected,
             saving = state.saving,
             error = state.error,
             onBack = viewModel::closeActivity,
@@ -143,121 +133,6 @@ private fun ActivityLibraryRow(
                         ?: "Movement metric unavailable"),
             )
         }
-    }
-}
-
-@Composable
-private fun ActivityDetailContent(
-    details: SavedActivityDetails,
-    saving: Boolean,
-    error: String?,
-    onBack: () -> Unit,
-    onEdit: (ActivityType, String?, String?) -> Unit,
-    onDelete: () -> Unit,
-) {
-    val activity = details.activity
-    val summary = details.summary
-    var editing by rememberSaveable(activity.id.value) { mutableStateOf(false) }
-    var deleteConfirmation by remember { mutableStateOf(false) }
-    var type by rememberSaveable(activity.id.value, editing) { mutableStateOf(activity.type) }
-    var title by rememberSaveable(activity.id.value, editing) { mutableStateOf(activity.title.orEmpty()) }
-    var notes by rememberSaveable(activity.id.value, editing) { mutableStateOf(activity.notes.orEmpty()) }
-
-    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(20.dp)
-                .testTag(ActivityLibraryTestTags.DETAIL),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            item {
-                TextButton(onClick = onBack) { Text("Back to activities") }
-                Text("Activity analysis", style = MaterialTheme.typography.headlineLarge)
-                Text(activity.title ?: activity.type.displayName(), style = MaterialTheme.typography.titleLarge)
-                Text("${activity.type.displayName()} · ${formatDate(activity.startedAt.value)}")
-                Text("Active time: ${formatDuration(activity.activeDuration.value)}")
-                Text("Distance: ${summary?.distance?.value?.let(::formatDistance) ?: "Unavailable"}")
-                activity.notes?.let { Text("Notes: $it") }
-                summary?.averagePace?.value?.let { Text("Average pace: ${formatPace(it)}") }
-                summary?.averageSpeed?.value?.let { Text("Average speed: ${formatSpeed(it)}") }
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            }
-            if (editing) {
-                item {
-                    Text("Edit activity", style = MaterialTheme.typography.titleLarge)
-                    ActivityType.entries.forEach { activityType ->
-                        FilterChip(
-                            selected = type == activityType,
-                            onClick = { type = activityType },
-                            label = { Text(activityType.displayName()) },
-                            modifier = Modifier.testTag("activity_edit_type_${activityType.name}"),
-                        )
-                    }
-                    OutlinedTextField(
-                        value = title,
-                        onValueChange = { title = it },
-                        label = { Text("Title (optional)") },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag(ActivityLibraryTestTags.EDIT_TITLE),
-                    )
-                    OutlinedTextField(
-                        value = notes,
-                        onValueChange = { notes = it },
-                        label = { Text("Notes (optional)") },
-                        minLines = 3,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag(ActivityLibraryTestTags.EDIT_NOTES),
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(
-                            onClick = {
-                                onEdit(type, title, notes)
-                                editing = false
-                            },
-                            enabled = !saving,
-                            modifier = Modifier.testTag(ActivityLibraryTestTags.EDIT_SAVE),
-                        ) { Text("Save changes") }
-                        TextButton(onClick = { editing = false }) { Text("Cancel") }
-                    }
-                }
-            } else {
-                item {
-                    Button(
-                        onClick = { editing = true },
-                        modifier = Modifier.testTag(ActivityLibraryTestTags.EDIT),
-                    ) { Text("Edit metadata") }
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = { deleteConfirmation = true },
-                        modifier = Modifier.testTag(ActivityLibraryTestTags.DELETE),
-                    ) { Text("Delete activity") }
-                }
-            }
-        }
-    }
-
-    if (deleteConfirmation) {
-        AlertDialog(
-            onDismissRequest = { deleteConfirmation = false },
-            title = { Text("Delete activity?") },
-            text = { Text("This permanently removes this activity and its recorded data.") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        deleteConfirmation = false
-                        onDelete()
-                    },
-                    modifier = Modifier.testTag(ActivityLibraryTestTags.DELETE_CONFIRM),
-                ) { Text("Delete permanently") }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleteConfirmation = false }) { Text("Cancel") }
-            },
-        )
     }
 }
 

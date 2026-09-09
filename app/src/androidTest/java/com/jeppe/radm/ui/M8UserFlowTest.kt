@@ -6,11 +6,14 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import com.jeppe.radm.MainActivity
@@ -139,6 +142,8 @@ class M8UserFlowTest {
         composeRule.waitUntil(10_000) {
             composeRule.activity.libraryViewModel().state.value.selected?.activity?.id == deleted.id
         }
+        composeRule.onNodeWithTag(ActivityLibraryTestTags.DETAIL)
+            .performScrollToNode(hasTestTag(ActivityLibraryTestTags.DELETE))
         composeRule.onNodeWithTag(ActivityLibraryTestTags.DELETE).performClick()
         composeRule.onNodeWithTag(ActivityLibraryTestTags.DELETE_CONFIRM).assertIsDisplayed()
         assertNotNull(application.container.activityRepository.get(deleted.id))
@@ -173,7 +178,9 @@ class M8UserFlowTest {
         composeRule.waitUntil(10_000) {
             composeRule.activity.libraryViewModel().state.value.selected?.activity?.id == activity.id
         }
-        composeRule.onNodeWithTag(ActivityLibraryTestTags.EDIT).performScrollTo().performClick()
+        composeRule.onNodeWithTag(ActivityLibraryTestTags.DETAIL)
+            .performScrollToNode(hasTestTag(ActivityLibraryTestTags.EDIT))
+        composeRule.onNodeWithTag(ActivityLibraryTestTags.EDIT).performClick()
         composeRule.onNodeWithTag("activity_edit_type_CYCLING").performScrollTo().performClick()
         composeRule.onNodeWithTag(ActivityLibraryTestTags.EDIT_TITLE)
             .performScrollTo()
@@ -190,6 +197,7 @@ class M8UserFlowTest {
         composeRule.waitUntil(10_000) {
             composeRule.activity.libraryViewModel().state.value.items.any { it.title == "Edited ride" }
         }
+        composeRule.onNodeWithTag(ActivityLibraryTestTags.DETAIL).performScrollToIndex(0)
         composeRule.onNodeWithText("Edited ride").assertIsDisplayed()
         val reloaded = application.container.activityRepository.get(activity.id)
         assertEquals(ActivityType.CYCLING, reloaded?.type)
