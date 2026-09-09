@@ -2,9 +2,9 @@
 
 ## Current State
 
-Current milestone: **M13 — Scale, performance and compatibility (not started)**
+Current milestone: **M14 — Physical-device validation and release hardening (not started)**
 
-Last completed milestone: **M12 — Map integration and full synchronization**
+Last completed milestone: **M13 — Scale, performance and compatibility**
 
 ---
 
@@ -25,7 +25,7 @@ Last completed milestone: **M12 — Map integration and full synchronization**
 | M10 — Static Activity Analysis | PASS | 2026-09-09 |
 | M11 — Synchronized graph analysis | PASS | 2026-09-09 |
 | M12 — Map integration and full synchronization | PASS | 2026-09-09 |
-| M13 — Scale, performance and compatibility | NOT_STARTED | — |
+| M13 — Scale, performance and compatibility | PASS | 2026-09-09 |
 | M14 — Physical-device validation and release hardening | NOT_STARTED | — |
 
 ---
@@ -733,11 +733,67 @@ Deferred verification and scope:
 
 ---
 
+## M13 Implementation Record
+
+Status: **PASS**
+
+Implemented:
+
+- deterministic on-device fixtures cover the 10,000-position representative
+  activity, 100,000-position large activity, and 10,000-entry summary library;
+- opt-in Galaxy S24 tests measure selected-position latency, continuous update
+  rate, local analysis load, scale, memory behavior, and recording UI response;
+- chart and map geometry are decimated for rendering only, with chart extrema,
+  route endpoints, and every discontinuity boundary retained;
+- source measurements and the complete in-memory logical analysis remain
+  unchanged and authoritative for synchronization, lookup, and inspection;
+- unchanged full/range MapLibre GeoJSON is cached across cursor-only updates;
+- API 26 and current-target API 37 compatibility workflows are automated.
+
+Measured S24 results:
+
+- selected-position p95: 83 ms (`≤100 ms`);
+- continuous selection: 62.5 updates/s (`≥30/s`);
+- 10,000-position analysis load p95: 402 ms (`≤2,000 ms`);
+- 100,000-position analysis: functional without OOM, with all logical points
+  retained;
+- 10,000-entry library: loaded in 279 ms, browsed and opened an entry;
+- rendering optimization reduced the measured large-analysis private-dirty
+  footprint from 396,359 KiB to 348,491 KiB (12.1%);
+- production recording UI dispatch observation: median 80 ms, p95 109 ms,
+  maximum 125 ms, with 8 retained GNSS positions and no sustained stall.
+
+Verification:
+
+- `./gradlew check assembleDebug assembleDebugAndroidTest` — PASS;
+- JVM tests — PASS (97 tests, 0 failures);
+- full AndroidJUnitRunner suite — PASS on Pixel_10 AVD, Android 17 / API 37
+  (65 tests, 0 failures; opt-in/environment cases skipped by assumption);
+- API 26 core UI/recording/persistence/analysis workflow — PASS;
+- five opt-in Galaxy S24 performance/capacity cases — PASS;
+- `git diff --check` — PASS;
+- evidence — `verification/reports/2026-09-09_s24_VVM-M13.md` and
+  `verification/performance/2026-09-09_s24_VVM-PERF-001-009.json`.
+
+Relevant verification IDs:
+
+- `VVM-PERF-001..009` — PASS;
+- `VVM-COMPAT-001..004` — PASS;
+- `VVM-ARCH-001/002` — PASS.
+
+Deferred verification and scope:
+
+- battery baseline, endurance, extended screen-off/background recording,
+  outdoor field usability, and release hardening remain M14;
+- the Android application-backup policy remains due before M14 completion.
+
+---
+
 ## Next Work Item
 
-Begin M13 with deterministic large-library/100,000-position fixtures and baseline
-analysis load, selected-position latency/update-rate, rendering, and memory
-measurements before making evidence-driven optimizations.
+Begin M14 physical-device validation and release hardening with the remaining
+endurance, battery, screen-off/background, field-usability, and release-policy
+items defined by RADM-IMP and RADM-VVM.
 
 ---
 

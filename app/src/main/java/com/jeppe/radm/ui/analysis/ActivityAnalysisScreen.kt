@@ -591,60 +591,6 @@ private fun SelectedPositionInspector(
     }
 }
 
-private data class ChartSegment(
-    val x: List<Double>,
-    val y: List<Double>,
-)
-
-private fun <T : Any> chartSegments(
-    points: List<AnalysisPoint<T>>,
-    coordinateMode: AnalysisCoordinateMode,
-    range: com.jeppe.radm.domain.analysis.AnalysisRange,
-    valueToY: (T) -> Double,
-): List<ChartSegment> {
-    val result = mutableListOf<ChartSegment>()
-    var group: Long? = null
-    var xValues = mutableListOf<Double>()
-    var yValues = mutableListOf<Double>()
-
-    fun flush() {
-        if (xValues.isNotEmpty()) result += ChartSegment(xValues, yValues)
-        xValues = mutableListOf()
-        yValues = mutableListOf()
-    }
-
-    points.forEach { point ->
-        if (point.position.activeElapsedTime !in
-            range.start.activeElapsedTime..range.endInclusive.activeElapsedTime
-        ) {
-            flush()
-            group = null
-            return@forEach
-        }
-        val x = when (coordinateMode) {
-            AnalysisCoordinateMode.DISTANCE -> point.position.cumulativeDistance?.value?.div(1_000.0)
-            AnalysisCoordinateMode.ACTIVE_ELAPSED_TIME -> point.position.activeElapsedTime.value / 60_000.0
-        }
-        val value = point.value
-        if (x == null || value == null) {
-            flush()
-            group = null
-            return@forEach
-        }
-        if (group != null && group != point.continuityGroup) flush()
-        group = point.continuityGroup
-        val y = valueToY(value)
-        if (xValues.lastOrNull() == x) {
-            yValues[yValues.lastIndex] = y
-        } else if (xValues.lastOrNull()?.let { x > it } != false) {
-            xValues += x
-            yValues += y
-        }
-    }
-    flush()
-    return result
-}
-
 private fun Double.toChartCoordinate(mode: AnalysisCoordinateMode): Double = when (mode) {
     AnalysisCoordinateMode.DISTANCE -> this / 1_000.0
     AnalysisCoordinateMode.ACTIVE_ELAPSED_TIME -> this / 60_000.0

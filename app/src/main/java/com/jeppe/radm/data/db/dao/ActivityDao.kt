@@ -14,6 +14,9 @@ interface ActivityDao {
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insertActivity(activity: ActivityEntity)
 
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertActivities(activities: List<ActivityEntity>)
+
     @Query("SELECT * FROM activities WHERE activity_id = :activityId")
     suspend fun getActivity(activityId: String): ActivityEntity?
 
@@ -100,8 +103,14 @@ interface ActivityDao {
     @Query("DELETE FROM activities WHERE activity_id = :activityId")
     suspend fun deleteActivity(activityId: String): Int
 
+    @Query("DELETE FROM activities")
+    suspend fun deleteAllActivities()
+
     @Upsert
     suspend fun upsertSummary(summary: ActivitySummaryEntity)
+
+    @Upsert
+    suspend fun upsertSummaries(summaries: List<ActivitySummaryEntity>)
 
     @Query("SELECT * FROM activity_summaries WHERE activity_id = :activityId")
     suspend fun getSummary(activityId: String): ActivitySummaryEntity?

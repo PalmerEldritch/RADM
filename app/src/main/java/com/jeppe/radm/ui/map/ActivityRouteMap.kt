@@ -38,6 +38,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.jeppe.radm.domain.analysis.ActivityAnalysisInteractionSnapshot
 import com.jeppe.radm.domain.analysis.AnalysisRouteCoordinate
 import com.jeppe.radm.domain.analysis.AnalysisRouteSegment
+import com.jeppe.radm.ui.analysis.routeSegmentsForRendering
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraUpdateFactory
 import org.maplibre.android.geometry.LatLng
@@ -241,6 +242,10 @@ private class MapLibreRouteController(
     private var resumed = false
     private var destroyed = false
     private var styleRequestId = 0L
+    private var fullRouteIdentity: List<AnalysisRouteSegment>? = null
+    private var highlightedRouteIdentity: List<AnalysisRouteSegment>? = null
+    private var fullRouteFeatures: FeatureCollection? = null
+    private var highlightedRouteFeatures: FeatureCollection? = null
 
     fun createView(): MapView {
         MapLibre.getInstance(context.applicationContext)
@@ -302,8 +307,18 @@ private class MapLibreRouteController(
     }
 
     fun render(snapshot: ActivityAnalysisInteractionSnapshot) {
+        val fullRouteChanged = snapshot.route.fullSegments !== fullRouteIdentity
+        val highlightedRouteChanged = snapshot.route.highlightedSegments !== highlightedRouteIdentity
+        if (fullRouteChanged) {
+            fullRouteIdentity = snapshot.route.fullSegments
+            fullRouteFeatures = routeFeatures(routeSegmentsForRendering(snapshot.route.fullSegments))
+        }
+        if (highlightedRouteChanged) {
+            highlightedRouteIdentity = snapshot.route.highlightedSegments
+            highlightedRouteFeatures = routeFeatures(routeSegmentsForRendering(snapshot.route.highlightedSegments))
+        }
         interaction = snapshot
-        if (styleReady) updateRouteSources()
+        if (styleReady) updateRouteSources(highlightedRouteChanged)
     }
 
     fun showFullRoute() {
@@ -367,7 +382,13 @@ private class MapLibreRouteController(
 
     private fun installRouteLayers(style: Style) {
         val snapshot = interaction ?: return
-        style.addSource(GeoJsonSource(FULL_ROUTE_SOURCE, routeFeatures(snapshot.route.fullSegments)))
+        if (fullRouteFeatures == null) {
+            fullRouteFeatures = routeFeatures(routeSegmentsForRendering(snapshot.route.fullSegments))
+        }
+        if (highlightedRouteFeatures == null) {
+            highlightedRouteFeatures = routeFeatures(routeSegmentsForRendering(snapshot.route.highlightedSegments))
+        }
+        style.addSource(GeoJsonSource(FULL_ROUTE_SOURCE, checkNotNull(fullRouteFeatures)))
         style.addLayer(
             LineLayer(ActivityRouteMapLayers.FULL_ROUTE, FULL_ROUTE_SOURCE).withProperties(
                 lineColor(Color.rgb(55, 71, 79)),
@@ -375,7 +396,7 @@ private class MapLibreRouteController(
                 lineOpacity(0.48f),
             ),
         )
-        style.addSource(GeoJsonSource(RANGE_ROUTE_SOURCE, routeFeatures(snapshot.route.highlightedSegments)))
+        style.addSource(GeoJsonSource(RANGE_ROUTE_SOURCE, checkNotNull(highlightedRouteFeatures)))
         style.addLayer(
             LineLayer(ActivityRouteMapLayers.RANGE_ROUTE, RANGE_ROUTE_SOURCE).withProperties(
                 lineColor(Color.rgb(0, 105, 92)),
@@ -401,16 +422,18 @@ private class MapLibreRouteController(
                 circleStrokeColor(Color.rgb(35, 35, 35)),
             ),
         )
-        updateRouteSources()
+        updateRouteSources(updateHighlightedRoute = false)
         if (!cameraInitialized) showFullRoute()
     }
 
-    private fun updateRouteSources() {
+    private fun updateRouteSources(updateHighlightedRoute: Boolean) {
         val readyMap = map ?: return
         val snapshot = interaction ?: return
         val style = readyMap.style ?: return
-        style.getSourceAs<GeoJsonSource>(RANGE_ROUTE_SOURCE)
-            ?.setGeoJson(routeFeatures(snapshot.route.highlightedSegments))
+        if (updateHighlightedRoute) {
+            style.getSourceAs<GeoJsonSource>(RANGE_ROUTE_SOURCE)
+                ?.setGeoJson(checkNotNull(highlightedRouteFeatures))
+        }
         style.getSourceAs<GeoJsonSource>(SELECTION_SOURCE)
             ?.setGeoJson(selectionFeature(snapshot))
     }

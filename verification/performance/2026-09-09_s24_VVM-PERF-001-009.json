@@ -1,0 +1,118 @@
+{
+  "date": "2026-09-09",
+  "status": "PASS",
+  "radmBuild": {
+    "variant": "debug",
+    "versionName": "1.0",
+    "versionCode": 1,
+    "sourceBaseline": "1f2050c plus the M13 change set"
+  },
+  "device": {
+    "manufacturer": "Samsung",
+    "modelName": "Galaxy S24",
+    "model": "SM-S921B",
+    "product": "e1sxeea",
+    "androidVersion": "16",
+    "apiLevel": 36,
+    "oneUiProperty": "80500",
+    "buildFingerprint": "samsung/e1sxeea/e1s:16/BP4A.251205.006/S921BXXSGDZG1:user/release-keys",
+    "applicationMaxHeapMiB": 256
+  },
+  "fixtures": {
+    "representativeAnalysisPositionCount": 10000,
+    "largeAnalysisPositionCount": 100000,
+    "largeLibraryActivityCount": 10000,
+    "generation": "fixed IDs, timestamps, coordinates, route segment, metrics, processor versions, and summaries"
+  },
+  "measurements": {
+    "VVM-PERF-001": {
+      "status": "PASS",
+      "method": "input selection to Compose idle with the representative activity loaded; 20 warm-up events excluded",
+      "measuredEvents": 160,
+      "unit": "ms",
+      "median": 66,
+      "p95": 83,
+      "maximum": 312,
+      "acceptanceP95Maximum": 100
+    },
+    "VVM-PERF-002": {
+      "status": "PASS",
+      "method": "distinct canonical application-state selections observed during a scheduled two-second Compose swipe",
+      "updates": 126,
+      "scheduledSeconds": 2.0,
+      "effectiveUpdatesPerSecond": 62.5,
+      "acceptanceMinimumUpdatesPerSecond": 30.0
+    },
+    "VVM-PERF-003": {
+      "status": "PASS",
+      "method": "request to open until local analysis state was loaded and Compose was idle; one warm-up then ten measured opens",
+      "positionCount": 10000,
+      "runs": 10,
+      "unit": "ms",
+      "median": 328,
+      "p95": 402,
+      "maximum": 452,
+      "acceptanceMaximum": 2000
+    },
+    "VVM-PERF-004": {
+      "status": "PASS",
+      "positionCount": 100000,
+      "analysisLoadMs": 2703,
+      "selectionOperations": 1000,
+      "fullLogicalDistancePointCount": 100000,
+      "result": "saved, loaded, rendered, selected, and inspected without OOM or persistence redesign"
+    },
+    "VVM-PERF-005": {
+      "status": "PASS",
+      "activityCount": 10000,
+      "libraryLoadMs": 279,
+      "result": "library loaded, scrolled to the final entry, and opened an individual activity"
+    },
+    "VVM-PERF-006": {
+      "status": "PASS",
+      "method": "summary-only joined library projection",
+      "sampleStreamsLoadedForLibrary": false
+    },
+    "VVM-PERF-007": {
+      "status": "PASS",
+      "method": "production foreground service, location and step sources, live metrics, checkpoint ticker, and repeated main-thread dispatch observation",
+      "observationSeconds": 20,
+      "mainThreadDispatchSamples": 80,
+      "unit": "ms",
+      "median": 80,
+      "p95": 109,
+      "maximum": 125,
+      "retainedPositionSamples": 8,
+      "retainedStepSamples": 0,
+      "note": "The step-counter source was registered but emitted no event during this short run; prior VVM-FIELD-006 evidence retains 18 real step events with a positive delta."
+    },
+    "VVM-PERF-008": {
+      "status": "PASS",
+      "largeAnalysisPrivateDirtyBeforeKiB": 153813,
+      "largeAnalysisPrivateDirtyAfterKiB": 348491,
+      "largeLibraryPrivateDirtyBeforeKiB": 154109,
+      "largeLibraryPrivateDirtyAfterKiB": 160113,
+      "result": "no OOM or unbounded-growth behavior observed"
+    },
+    "VVM-PERF-009": {
+      "status": "PASS",
+      "chartRenderingPointLimit": 2000,
+      "routeRenderingPointLimit": 5000,
+      "fullLogicalDataRetained": true,
+      "selectionUsesFullLogicalData": true,
+      "segmentBoundariesPreserved": true
+    }
+  },
+  "profiling": {
+    "beforeOptimization": {
+      "largeAnalysisPrivateDirtyAfterKiB": 396359,
+      "behavior": "Map range GeoJSON was rebuilt for unchanged ranges on every cursor selection; charts and map received all 100000 points."
+    },
+    "afterOptimization": {
+      "largeAnalysisPrivateDirtyAfterKiB": 348491,
+      "privateDirtyReductionKiB": 47868,
+      "privateDirtyReductionPercent": 12.1,
+      "behavior": "Rendering-only chart/route decimation and identity-cached route-range GeoJSON; source and logical analysis arrays unchanged."
+    }
+  }
+}

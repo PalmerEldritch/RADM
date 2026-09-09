@@ -275,11 +275,13 @@ Verification matrix         Baseline
 Implementation plan         Baseline
 Architecture ADRs 001–009   Accepted
 
-Implementation              M12 complete; M13 not started
-Last local gate             ./gradlew check assembleDebug — PASS (2026-09-09)
-Applicable M12 VVM          AN-003/004/007/008/009, OFF-002, PRIV-001, UX-006 — PASS
-JVM tests                   95 tests — PASS
-Android instrumentation     58 tests — PASS (3 physical-device/opt-in skips; Pixel_10 AVD, Android 17 / API 37, 2026-09-09)
+Implementation              M13 complete; M14 not started
+Last local gate             ./gradlew check assembleDebug assembleDebugAndroidTest — PASS (2026-09-09)
+Applicable M13 VVM          PERF-001..009, COMPAT-001..004, ARCH-001/002 — PASS
+JVM tests                   97 tests — PASS
+Android instrumentation     65 tests — PASS (opt-in/environment skips; Pixel_10 AVD, Android 17 / API 37, 2026-09-09)
+Minimum API compatibility   COMPAT-001/002 — PASS (API 26 AVD)
+Reference performance       PERF-001..009 — PASS (Galaxy S24 SM-S921B/DS)
 M5 physical smoke           PASS (Galaxy S24 SM-S921B/DS)
 M6 physical step source     PASS (18 retained events; 17 within-epoch steps)
 M9 physical reboot          RECOV-005/006 — PASS (Galaxy S24 SM-S921B/DS, 2026-09-09)
@@ -356,6 +358,18 @@ selection and graph updates do not recenter the map. When connectivity or the
 provider style is unavailable, an explicit local fallback keeps the recorded
 route and all local analysis usable. See
 [`verification/reports/2026-09-09_pixel10_VVM-M12.md`](verification/reports/2026-09-09_pixel10_VVM-M12.md).
+
+M13 adds deterministic on-device 10,000-point, 100,000-point, and 10,000-activity
+fixtures plus opt-in reference-device measurements. On the Galaxy S24,
+selected-position p95 is 83 ms, continuous selection sustains 62.5 updates/s, and
+the representative 10,000-position activity loads at 402 ms p95. The 100,000-point
+analysis and 10,000-entry library remain functional without OOM. Profile-guided,
+rendering-only chart/route decimation and cached MapLibre range geometry reduce
+large-analysis private-dirty memory while full logical/source arrays remain
+unchanged. API 26 core flow and the full current-target API 37 suite pass. See
+[`verification/reports/2026-09-09_s24_VVM-M13.md`](verification/reports/2026-09-09_s24_VVM-M13.md)
+and
+[`verification/performance/2026-09-09_s24_VVM-PERF-001-009.json`](verification/performance/2026-09-09_s24_VVM-PERF-001-009.json).
 
 The Android application-backup policy remains intentionally open and must be resolved before R00 release.
 

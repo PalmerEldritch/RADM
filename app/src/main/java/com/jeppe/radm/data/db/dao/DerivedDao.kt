@@ -61,6 +61,9 @@ interface DerivedDao {
     @Upsert
     suspend fun upsertProcessorState(state: ActivityProcessorStateEntity)
 
+    @Upsert
+    suspend fun upsertProcessorStates(states: List<ActivityProcessorStateEntity>)
+
     @Query(
         """
         SELECT * FROM activity_processor_state
