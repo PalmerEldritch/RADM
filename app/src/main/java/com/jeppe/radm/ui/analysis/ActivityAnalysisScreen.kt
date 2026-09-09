@@ -49,6 +49,7 @@ import com.jeppe.radm.domain.model.ElevationMetres
 import com.jeppe.radm.domain.model.PaceSecondsPerKilometre
 import com.jeppe.radm.domain.model.SpeedMetresPerSecond
 import com.jeppe.radm.ui.library.ActivityLibraryTestTags
+import com.jeppe.radm.ui.map.ActivityRouteMap
 import com.patrykandpatrick.vico.compose.cartesian.CartesianChartHost
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberBottom
 import com.patrykandpatrick.vico.compose.cartesian.axis.rememberStart
@@ -107,6 +108,7 @@ fun ActivityAnalysisScreen(
     onCoordinateMode: (AnalysisCoordinateMode) -> Unit,
     onRange: (Double, Double) -> Unit,
     onRestoreFullRange: () -> Unit,
+    onSelectRoute: (latitude: Double, longitude: Double, toleranceMetres: Double) -> Unit,
     onEdit: (ActivityType, String?, String?) -> Unit,
     onDelete: () -> Unit,
 ) {
@@ -152,6 +154,15 @@ fun ActivityAnalysisScreen(
 
             item {
                 RouteSummary(data, interaction)
+            }
+
+            if (data.routeSegments.isNotEmpty()) {
+                item {
+                    ActivityRouteMap(
+                        interaction = interaction,
+                        onSelectRoute = onSelectRoute,
+                    )
+                }
             }
 
             when (activity.type) {

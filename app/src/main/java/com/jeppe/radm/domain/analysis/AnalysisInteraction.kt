@@ -28,6 +28,7 @@ data class ActivityAnalysisInteractionSnapshot(
     val rangeStartFraction: Double,
     val rangeEndFraction: Double,
     val cursorFraction: Double?,
+    val route: ActivityAnalysisRouteSnapshot,
 )
 
 /**
@@ -146,8 +147,10 @@ class ActivityAnalysisInteraction(
     private val data: ActivityAnalysisData,
 ) {
     val lookup = ActivityAnalysisLookup(data)
+    val routeLookup = ActivityRouteLookup(data.routeSegments)
     private val fullRange = data.initialState.range
     private var state = data.initialState
+    private var highlightedRouteSegments = routeLookup.segmentsInRange(state.range)
 
     var snapshot: ActivityAnalysisInteractionSnapshot = buildSnapshot()
         private set
@@ -187,6 +190,7 @@ class ActivityAnalysisInteraction(
             selectedPosition = lookup.positionAt(state.selectedPosition.activeElapsedTime.coerceTo(range)),
             range = range,
         )
+        highlightedRouteSegments = routeLookup.segmentsInRange(range)
         return refresh()
     }
 
@@ -195,6 +199,17 @@ class ActivityAnalysisInteraction(
             selectedPosition = lookup.positionAt(state.selectedPosition.activeElapsedTime.coerceTo(fullRange)),
             range = fullRange,
         )
+        highlightedRouteSegments = routeLookup.segmentsInRange(fullRange)
+        return refresh()
+    }
+
+    fun selectRouteCoordinate(
+        coordinate: AnalysisRouteCoordinate,
+        toleranceMetres: Double,
+    ): ActivityAnalysisInteractionSnapshot {
+        val candidate = routeLookup.nearestPosition(coordinate, toleranceMetres, state.range)
+            ?: return snapshot
+        state = state.copy(selectedPosition = lookup.positionAt(candidate.activeElapsedTime))
         return refresh()
     }
 
@@ -212,6 +227,11 @@ class ActivityAnalysisInteraction(
             rangeStartFraction = fullExtent.fractionOf(visibleExtent.start),
             rangeEndFraction = fullExtent.fractionOf(visibleExtent.endInclusive),
             cursorFraction = selectedCoordinate?.let(visibleExtent::fractionOf)?.coerceIn(0.0, 1.0),
+            route = ActivityAnalysisRouteSnapshot(
+                fullSegments = routeLookup.fullSegments,
+                highlightedSegments = highlightedRouteSegments,
+                selectedCoordinate = routeLookup.coordinateAt(state.selectedPosition.activeElapsedTime),
+            ),
         )
     }
 

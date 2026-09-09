@@ -12,6 +12,7 @@ import com.jeppe.radm.domain.analysis.ActivityAnalysisData
 import com.jeppe.radm.domain.analysis.ActivityAnalysisInteraction
 import com.jeppe.radm.domain.analysis.ActivityAnalysisInteractionSnapshot
 import com.jeppe.radm.domain.analysis.AnalysisCoordinateMode
+import com.jeppe.radm.domain.analysis.AnalysisRouteCoordinate
 import com.jeppe.radm.domain.model.AbsoluteTimestampUtcMillis
 import com.jeppe.radm.domain.model.ActivityId
 import com.jeppe.radm.domain.model.ActivityLibraryItem
@@ -98,6 +99,19 @@ class ActivityLibraryViewModel(
 
     fun restoreFullAnalysisRange() {
         updateInteraction { restoreFullRange() }
+    }
+
+    fun selectAnalysisRoutePosition(
+        latitude: Double,
+        longitude: Double,
+        toleranceMetres: Double,
+    ) {
+        updateInteraction {
+            selectRouteCoordinate(
+                AnalysisRouteCoordinate(latitude, longitude),
+                toleranceMetres,
+            )
+        }
     }
 
     fun edit(

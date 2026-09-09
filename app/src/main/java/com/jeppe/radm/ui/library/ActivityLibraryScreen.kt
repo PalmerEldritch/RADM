@@ -64,6 +64,7 @@ fun ActivityLibraryScreen(
             onCoordinateMode = viewModel::setAnalysisCoordinateMode,
             onRange = viewModel::setAnalysisRange,
             onRestoreFullRange = viewModel::restoreFullAnalysisRange,
+            onSelectRoute = viewModel::selectAnalysisRoutePosition,
             onEdit = viewModel::edit,
             onDelete = viewModel::deleteSelected,
         )

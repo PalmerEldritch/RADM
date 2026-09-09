@@ -2,9 +2,9 @@
 
 ## Current State
 
-Current milestone: **M12 — Map integration and full synchronization (not started)**
+Current milestone: **M13 — Scale, performance and compatibility (not started)**
 
-Last completed milestone: **M11 — Synchronized graph analysis**
+Last completed milestone: **M12 — Map integration and full synchronization**
 
 ---
 
@@ -24,7 +24,7 @@ Last completed milestone: **M11 — Synchronized graph analysis**
 | M9 — Durability and recovery | PASS | 2026-09-09 |
 | M10 — Static Activity Analysis | PASS | 2026-09-09 |
 | M11 — Synchronized graph analysis | PASS | 2026-09-09 |
-| M12 — Map integration and full synchronization | NOT_STARTED | — |
+| M12 — Map integration and full synchronization | PASS | 2026-09-09 |
 | M13 — Scale, performance and compatibility | NOT_STARTED | — |
 | M14 — Physical-device validation and release hardening | NOT_STARTED | — |
 
@@ -663,10 +663,81 @@ Deferred verification and scope:
 
 ---
 
+## M12 Implementation Record
+
+Status: **PASS**
+
+Implemented:
+
+- MapLibre Native Android 13.6.0 is integrated behind `ui.map`, with
+  renderer-specific state isolated from the domain/application synchronization
+  model;
+- the OpenFreeMap Liberty style is the fixed R00 basemap configuration, with no
+  account, key, query, activity identity, or unrelated activity measurements;
+- full recorded route, selected-range route, start/finish endpoints, and selected
+  position are local GeoJSON layers rendered independently above the basemap;
+- one GeoJSON line feature is produced for each retained route segment, so known
+  location gaps are not joined visually;
+- Android-independent route lookup projects a touch onto the nearest valid point
+  within an individual segment and maps it to interpolated canonical active
+  elapsed time;
+- the MapLibre adapter converts a 48 dp touch tolerance to metres using the
+  current projection and passes only the candidate coordinate/tolerance to the
+  domain model;
+- graph drag updates the visible MapLibre selected-position marker, while map
+  route touch updates every graph cursor and the point inspector through the M11
+  canonical state;
+- the map highlights the exact canonical analysis range while retaining
+  de-emphasized full-route context and separated gaps;
+- touch pan/zoom never writes selection, graph updates never move the camera, and
+  an explicit Full route action is the only synchronization-adjacent camera reset;
+- connectivity loss and provider/style failure select a local route-capable
+  fallback style and present explicit basemap-unavailable status without blocking
+  local graphs, inspector, range, or selection;
+- generation-guarded asynchronous style loading prevents stale online/offline
+  callbacks from replacing the current map decision;
+- MapLibre is initialized inside the presentation adapter before view creation,
+  and INTERNET plus
+  ACCESS_NETWORK_STATE are the only new manifest capabilities.
+
+Verification:
+
+- `./gradlew check assembleDebug assembleDebugAndroidTest` — PASS;
+- JVM tests — PASS (95 tests, 0 failures);
+- direct AndroidJUnitRunner suite — PASS on Pixel_10 AVD, Android 17 / API 37
+  (58 tests, 0 failures, 3 skipped existing physical-device/opt-in cases);
+- targeted M12 MapLibre/Compose suite — PASS (6 tests, 0 failures);
+- Android lint/static checks and debug/test APK builds — PASS;
+- `git diff --check` — PASS;
+- evidence — `verification/reports/2026-09-09_pixel10_VVM-M12.md`.
+
+Relevant verification IDs:
+
+- `VVM-AN-003/004` — PASS;
+- `VVM-AN-007` — PASS including route-range highlighting;
+- `VVM-AN-008/009` — PASS;
+- `VVM-OFF-002` — PASS;
+- `VVM-PRIV-001` — PASS;
+- `VVM-UX-006` — PASS;
+- `VVM-UX-002` — PASS for automated Pixel_10 touch behavior; formal DEVICE
+  acceptance remains `NOT_RUN` because VVM requires the Galaxy S24 reference
+  device.
+
+Deferred verification and scope:
+
+- `VVM-UX-002` formal reference-device usability confirmation remains a
+  physical-device validation item;
+- scale, selected-position performance, large-route rendering, load, and memory
+  evidence are M13;
+- no physical-device claim is made by the M12 emulator evidence.
+
+---
+
 ## Next Work Item
 
-Begin M12 with MapLibre/OpenFreeMap route rendering behind a presentation adapter,
-then connect map selection and marker state to the existing canonical M11 model.
+Begin M13 with deterministic large-library/100,000-position fixtures and baseline
+analysis load, selected-position latency/update-rate, rendering, and memory
+measurements before making evidence-driven optimizations.
 
 ---
 
